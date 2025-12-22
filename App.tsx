@@ -125,8 +125,6 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
     } else if (fnName === 'updateClient') {
       const oldName = args[0].replace(/[.#$[\]/]/g, '_');
       const newData = args[1];
-      // Se o nome mudou, precisamos deletar o antigo e criar o novo ou apenas atualizar os dados
-      // Para simplificar e manter a lógica do app, apenas atualizamos o nó atual
       await fetch(getUrl(`v1/clients/${oldName}`), {
         method: 'PATCH',
         body: JSON.stringify(newData)
@@ -724,8 +722,8 @@ const App: React.FC = () => {
 
       {/* MODAL FINANCEIRO */}
       {isFinanceOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center shrink-0">
                <div className="flex flex-col">
                   <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Financeiro</h2>
@@ -778,12 +776,12 @@ const App: React.FC = () => {
             </div>
 
             {auth.role === 'master' && (
-              <div className="p-8 bg-slate-50 dark:bg-slate-800/30 rounded-[2rem] space-y-5 border border-slate-100 dark:border-slate-800">
+              <div className="p-4 sm:p-8 bg-slate-50 dark:bg-slate-800/30 rounded-[2rem] space-y-5 border border-slate-100 dark:border-slate-800">
                  <div className="flex justify-between items-center"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Progresso Anual</span><button onClick={() => { setIsEditingLimit(!isEditingLimit); setEditLimitValue(annualLimit.toString()); }} className="p-2 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={12} /></button></div>
                  {isEditingLimit ? (
-                   <div className="flex gap-2 animate-in slide-in-from-top-2">
-                      <input type="number" value={editLimitValue} onChange={(e) => setEditLimitValue(e.target.value)} className="flex-1 p-4 rounded-2xl bg-white dark:bg-slate-900 text-sm font-bold outline-none border-2 border-[var(--primary-color)]" />
-                      <button onClick={handleSaveNewLimit} className="p-4 gold-gradient text-white rounded-2xl"><CheckCircle2 size={20} /></button>
+                   <div className="flex flex-wrap gap-2 animate-in slide-in-from-top-2 w-full">
+                      <input type="number" value={editLimitValue} onChange={(e) => setEditLimitValue(e.target.value)} className="flex-1 min-w-0 p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 text-sm font-bold outline-none border-2 border-[var(--primary-color)]" />
+                      <button onClick={handleSaveNewLimit} className="shrink-0 p-3 sm:p-4 gold-gradient text-white rounded-2xl active:scale-95 transition-all"><CheckCircle2 size={20} /></button>
                    </div>
                  ) : (
                    <div>
@@ -860,7 +858,6 @@ const App: React.FC = () => {
       {isHistoryOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 flex flex-col animate-in zoom-in-95 duration-300 max-h-[90vh]">
-             {/* Cabeçalho Histórico */}
              <div className="flex justify-between items-center mb-6 shrink-0">
                 <div className="flex flex-col">
                   <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Histórico Geral</h2>
@@ -869,7 +866,6 @@ const App: React.FC = () => {
                 <button onClick={() => setIsHistoryOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button>
              </div>
 
-             {/* Controles do Histórico */}
              <div className="space-y-4 mb-6 shrink-0">
                <div className="relative">
                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -891,7 +887,6 @@ const App: React.FC = () => {
                </div>
              </div>
 
-             {/* Lista do Histórico */}
              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-10">
                 {Object.keys(groupedHistory).length > 0 ? (Object.entries(groupedHistory) as [string, Appointment[]][]).map(([date, apps]) => (
                   <div key={date} className="space-y-4">
@@ -970,11 +965,11 @@ const App: React.FC = () => {
 
       {/* MODAL PARCEIRAS */}
       {isPartnersOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300">
-             <div className="flex justify-between items-center">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+             <div className="flex justify-between items-center shrink-0">
                 <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Equipe</h2>
-                <button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
+                <button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button>
              </div>
              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Profissional</p>
@@ -998,14 +993,14 @@ const App: React.FC = () => {
                 </div>
                 <button onClick={handleAddPartner} className="w-full gold-gradient text-white py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest shadow-lg">Cadastrar Parceira</button>
              </div>
-             <div className="space-y-4 max-h-80 overflow-y-auto custom-scrollbar pr-2">
+             <div className="space-y-4">
                 {(partners as Partner[]).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between p-5 bg-white dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
+                  <div key={i} className="flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
                     {editingPartnerIndex === i ? (
                       <div className="w-full flex flex-col gap-3">
-                         <div className="flex gap-2">
-                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} className="flex-1 bg-slate-50 p-3 rounded-xl text-xs font-bold" />
-                            <input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-32 bg-slate-50 p-3 rounded-xl text-xs font-bold" type="text" placeholder="Senha" />
+                         <div className="flex flex-col sm:flex-row gap-2">
+                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" />
+                            <input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" type="text" placeholder="Senha" />
                          </div>
                          <div className="flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                             <div className="flex flex-col">
@@ -1026,8 +1021,8 @@ const App: React.FC = () => {
                       </div>
                     ) : (
                       <>
-                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center"><HardHat size={20} /></div>
+                         <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center"><HardHat size={20} /></div>
                             <div>
                                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{p.name}</p>
                                <div className="flex items-center gap-2">
@@ -1038,6 +1033,7 @@ const App: React.FC = () => {
                          </div>
                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                             <button onClick={() => { setEditingPartnerIndex(i); setEditPartnerName(p.name); setEditPartnerPass(p.password); setEditPartnerCommission(p.commission || 50); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button>
+                            {/* Fix: use correct loop variable 'i' instead of undefined 'index' */}
                             <button onClick={() => handleDeletePartner(i)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
                          </div>
                       </>
@@ -1053,7 +1049,6 @@ const App: React.FC = () => {
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
-             {/* Cabeçalho Fixo */}
              <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 shrink-0">
                 <div>
                    <h2 className="text-lg font-bold dark:text-white uppercase tracking-tight">Ajustes Studio</h2>
@@ -1062,7 +1057,6 @@ const App: React.FC = () => {
                 <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400"><X size={20} /></button>
              </div>
 
-             {/* Conteúdo Rolável */}
              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                    <div className="space-y-1">
@@ -1127,7 +1121,6 @@ const App: React.FC = () => {
                 </div>
              </div>
 
-             {/* Rodapé Fixo */}
              <div className="p-6 border-t dark:border-slate-800 shrink-0">
                 <button onClick={saveSettings} disabled={savingSettings} className="w-full gold-gradient text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-[0.2em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all">
                    {savingSettings ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /><span>Salvar Alterações</span></>}
