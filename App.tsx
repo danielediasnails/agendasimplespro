@@ -6,7 +6,7 @@ import {
   CalendarDays, Loader2, LogOut, Briefcase, 
   Edit2, Search, List, Menu, BarChart3, 
   Scissors, Sparkles, Flower2, Crown, Heart, Fingerprint, Star, Brush, Gem, Smile,
-  Coffee, Zap, Paintbrush, Hand, Eye, Droplets, Feather, Wand2, SprayCan, Diamond,
+  Coffee, Zap, Paintbrush, Hand, Eye, EyeOff, Droplets, Feather, Wand2, SprayCan, Diamond,
   Clover, Infinity, Waves, Shapes, PersonStanding, Footprints, Dna, Award,
   User, UserRound, Contact, SmilePlus, Lock, KeyRound, ArrowRight, Trash2, ChevronDown, ChevronUp,
   UserSearch, Sparkle, Pipette, Upload, Save, Receipt, Wallet, CalendarRange, Target, ShieldCheck,
@@ -233,6 +233,18 @@ const App: React.FC = () => {
   const [historyPartnerFilter, setHistoryPartnerFilter] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Quick Dashboard State
+  const [quickReportMonth, setQuickReportMonth] = useState(new Date().getMonth());
+  const [quickReportYear, setQuickReportYear] = useState(new Date().getFullYear());
+  const [isQuickValuesVisible, setIsQuickValuesVisible] = useState(() => {
+    const saved = localStorage.getItem('studio_values_visible');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('studio_values_visible', JSON.stringify(isQuickValuesVisible));
+  }, [isQuickValuesVisible]);
+
   // Carrega credenciais lembradas ao iniciar
   useEffect(() => {
     const savedCreds = localStorage.getItem('studio_remembered_creds');
@@ -331,11 +343,19 @@ const App: React.FC = () => {
 
             if (data.settings.userTimes) {
               const utValue = data.settings.userTimes;
-              const utStr = typeof utValue === 'string' ? utValue : utValue.join(',');
+              const utStr = typeof utValue === 'string' ? utValue : (Array.isArray(utValue) ? utValue.join(',') : '');
               setUserTimes(utStr.split(',').filter(Boolean));
             }
-            if (data.settings.procedures) setProcedures(data.settings.procedures.split(',').filter(Boolean));
-            if (data.settings.secondaryProcedures) setSecondaryProcedures(data.settings.secondaryProcedures.split(',').filter(Boolean));
+            if (data.settings.procedures) {
+              const val = data.settings.procedures;
+              const arr = typeof val === 'string' ? val.split(',').filter(Boolean) : (Array.isArray(val) ? val : []);
+              setProcedures(arr);
+            }
+            if (data.settings.secondaryProcedures) {
+              const val = data.settings.secondaryProcedures;
+              const arr = typeof val === 'string' ? val.split(',').filter(Boolean) : (Array.isArray(val) ? val : []);
+              setSecondaryProcedures(arr);
+            }
             if (data.settings.partners) {
               const pts = typeof data.settings.partners === 'string' ? JSON.parse(data.settings.partners) : data.settings.partners;
               setPartners(pts);
@@ -374,6 +394,25 @@ const App: React.FC = () => {
     }
     return 100;
   }, [auth, partners]);
+
+  // Mini Report Logic
+  const quickSummary = useMemo(() => {
+    let base = appointments;
+    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
+    
+    const filtered = base.filter(app => {
+      const d = new Date(app.date + 'T12:00:00');
+      return d.getMonth() === quickReportMonth && d.getFullYear() === quickReportYear;
+    });
+
+    const total = filtered.reduce((sum, app) => {
+      const val = (Number(app.totalValue || 0) + Number(app.deposit || 0));
+      const commission = auth.role === 'partner' ? currentPartnerCommission : 100;
+      return sum + (val * (commission / 100));
+    }, 0);
+
+    return { count: filtered.length, total };
+  }, [appointments, quickReportMonth, quickReportYear, auth, currentPartnerCommission]);
 
   const groupedHistory = useMemo<Record<string, Appointment[]>>(() => {
     let base = appointments.slice().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
@@ -523,12 +562,18 @@ const App: React.FC = () => {
 
   const persistSettings = (opts: { updatedProcedures?: string[], updatedSecProcedures?: string[], updatedAnnualLimit?: number, updatedPartners?: Partner[] } = {}) => {
     const { updatedProcedures, updatedSecProcedures, updatedAnnualLimit, updatedPartners } = opts;
+    
+    // Robustez para garantir que chamamos join() apenas em arrays
+    const safeProcedures = Array.isArray(procedures) ? procedures : [];
+    const safeSecProcedures = Array.isArray(secondaryProcedures) ? secondaryProcedures : [];
+    const safeUserTimes = Array.isArray(userTimes) ? userTimes : [];
+
     const settings = { 
       studioName, studioSubtitle, studioIcon, themeId: currentTheme.id, themeMode, customColor,
       annualLimit: updatedAnnualLimit !== undefined ? updatedAnnualLimit.toString() : annualLimit.toString(),
-      userTimes: userTimes.join(','),
-      procedures: updatedProcedures ? updatedProcedures.join(',') : procedures.join(','),
-      secondaryProcedures: updatedSecProcedures ? updatedSecProcedures.join(',') : secondaryProcedures.join(','),
+      userTimes: safeUserTimes.join(','),
+      procedures: updatedProcedures ? updatedProcedures.join(',') : safeProcedures.join(','),
+      secondaryProcedures: updatedSecProcedures ? updatedSecProcedures.join(',') : safeSecProcedures.join(','),
       partners: JSON.stringify(updatedPartners || partners),
       masterUsername,
       masterPassword
@@ -700,9 +745,71 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-5xl mx-auto p-6 space-y-8">
-        <div className="flex flex-col items-center text-center space-y-1">
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Profissional</span>
-          <h2 className="text-2xl font-black gold-text-gradient uppercase tracking-tight">{auth.username}</h2>
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="flex flex-col items-center text-center space-y-1">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Profissional</span>
+            <h2 className="text-2xl font-black gold-text-gradient uppercase tracking-tight">{auth.username}</h2>
+          </div>
+
+          {/* DASHBOARD RÁPIDO - ULTRA COMPACTO E ALINHADO */}
+          <div className="w-full max-w-lg mx-auto flex items-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-[1.25rem] border border-slate-200/60 dark:border-slate-800/60 shadow-lg overflow-hidden flex-nowrap">
+            
+            {/* Controles de Data (Compactos) */}
+            <div className="flex items-center gap-1 p-1.5 bg-slate-50 dark:bg-slate-800/40 border-r dark:border-slate-800 shrink-0">
+              <div className="relative">
+                <select 
+                  value={quickReportMonth} 
+                  onChange={(e) => setQuickReportMonth(parseInt(e.target.value))}
+                  className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[45px]"
+                >
+                  {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                </select>
+                <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={8} />
+              </div>
+              
+              <div className="relative">
+                <select 
+                  value={quickReportYear} 
+                  onChange={(e) => setQuickReportYear(parseInt(e.target.value))}
+                  className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[50px]"
+                >
+                  {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={8} />
+              </div>
+            </div>
+
+            {/* Indicadores Centrais */}
+            <div className="flex-1 flex items-center justify-center gap-4 px-2 min-w-0">
+              {/* Clientes */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Users size={14} className="text-slate-400" />
+                <span className="text-[13px] font-black text-slate-600 dark:text-slate-200">
+                  {isQuickValuesVisible ? quickSummary.count : '••'}
+                </span>
+              </div>
+
+              {/* Divisor suave */}
+              <div className="w-[1px] h-6 bg-slate-100 dark:bg-slate-800 shrink-0" />
+
+              {/* Ganhos (Saldo) */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Banknote size={14} className="text-emerald-500" />
+                <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                  {isQuickValuesVisible ? `R$ ${quickSummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}` : '••••'}
+                </span>
+              </div>
+            </div>
+
+            {/* Olho de Privacidade (Slot fixo no final) */}
+            <button 
+              onClick={() => setIsQuickValuesVisible(!isQuickValuesVisible)}
+              className={`h-10 w-10 flex items-center justify-center transition-all border-l border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 shrink-0 ${isQuickValuesVisible ? 'text-slate-300' : 'text-[var(--primary-color)]'}`}
+              title={isQuickValuesVisible ? "Ocultar Valores" : "Mostrar Valores"}
+            >
+              {isQuickValuesVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+          </div>
         </div>
 
         <div className="relative w-full">
@@ -1039,7 +1146,7 @@ const App: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
              <div className="flex justify-between items-center shrink-0">
                 <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Equipe</h2>
-                <button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button>
+                <button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
              </div>
              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Profissional</p>
@@ -1048,7 +1155,7 @@ const App: React.FC = () => {
                    <input value={newPartnerPass} onChange={e => setNewPartnerPass(e.target.value)} placeholder="Senha" type="text" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
                    <div className="col-span-2 flex flex-col bg-white dark:bg-slate-900 p-5 rounded-2xl">
                       <div className="flex flex-col">
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissão Profissional</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissão Porcentagem</span>
                          <p className="text-[8px] text-slate-400 uppercase tracking-widest mt-1.5">Escolha a porcentagem</p>
                       </div>
                       <div className="relative mt-3">
