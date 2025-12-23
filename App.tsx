@@ -78,7 +78,9 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
         annualLimit: String(MEI_LIMIT),
         procedures: DEFAULT_PROCEDURES.join(','),
         secondaryProcedures: DEFAULT_SECONDARY_PROCEDURES.join(','),
-        partners: JSON.stringify(DEFAULT_PARTNERS)
+        partners: JSON.stringify(DEFAULT_PARTNERS),
+        masterUsername: 'danielediasnails',
+        masterPassword: '@Jsloks147@'
       };
 
       result = {
@@ -167,18 +169,24 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : { isAuthenticated: false, role: null, username: null };
   });
 
-  const [loginUser, setLoginUser] = useState('danielediasnails');
+  const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [loginError, setLoginError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
+  
+  // Settings State
   const [studioName, setStudioName] = useState('Daniele Dias Nails');
   const [studioSubtitle, setStudioSubtitle] = useState('Studio Nails');
   const [studioIcon, setStudioIcon] = useState('calendar');
   const [themeMode, setThemeMode] = useState<AppearanceMode>('light');
   const [customColor, setCustomColor] = useState('#D4AF37');
   const [annualLimit, setAnnualLimit] = useState(MEI_LIMIT);
+  const [masterUsername, setMasterUsername] = useState('danielediasnails');
+  const [masterPassword, setMasterPassword] = useState('@Jsloks147@');
+
+  const [userEmail, setUserEmail] = useState('');
   const [userTimes, setUserTimes] = useState<string[]>([]);
   const [currentTheme, setCurrentTheme] = useState<ThemePalette>(COLOR_PALETTES[0]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -228,15 +236,24 @@ const App: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     let newAuth: AuthState | null = null;
-    if (loginUser === 'danielediasnails' && loginPass === '@Jsloks147@') {
+    const normalizedTypedLogin = loginUser.trim().toLowerCase();
+    
+    // Check against Master Credentials
+    if (normalizedTypedLogin === masterUsername.toLowerCase() && loginPass === masterPassword) {
       newAuth = { isAuthenticated: true, role: 'master', username: 'Daniele Dias' };
     } else {
-      const foundPartner = partners.find(p => p.login === loginUser && p.password === loginPass);
+      // Check against Partners
+      const foundPartner = partners.find(p => p.login === normalizedTypedLogin && p.password === loginPass);
       if (foundPartner) newAuth = { isAuthenticated: true, role: 'partner', username: foundPartner.name };
     }
+
     if (newAuth) {
       setAuth(newAuth);
-      localStorage.setItem('studio_auth_data', JSON.stringify(newAuth));
+      if (rememberMe) {
+        localStorage.setItem('studio_auth_data', JSON.stringify(newAuth));
+      } else {
+        localStorage.removeItem('studio_auth_data');
+      }
       setLoginError(false);
     } else {
       setLoginError(true);
@@ -247,7 +264,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('studio_auth_data');
     setAuth({ isAuthenticated: false, role: null, username: null });
-    setLoginUser('danielediasnails');
+    setLoginUser('');
     setLoginPass('');
     setIsMenuOpen(false);
   };
@@ -285,6 +302,9 @@ const App: React.FC = () => {
             setThemeMode((data.settings.themeMode as AppearanceMode) || 'light');
             setCustomColor(data.settings.customColor || '#D4AF37');
             setAnnualLimit(Number(data.settings.annualLimit) || MEI_LIMIT);
+            setMasterUsername(data.settings.masterUsername || 'danielediasnails');
+            setMasterPassword(data.settings.masterPassword || '@Jsloks147@');
+
             if (data.settings.userTimes) {
               const utValue = data.settings.userTimes;
               const utStr = typeof utValue === 'string' ? utValue : utValue.join(',');
@@ -485,7 +505,9 @@ const App: React.FC = () => {
       userTimes: userTimes.join(','),
       procedures: updatedProcedures ? updatedProcedures.join(',') : procedures.join(','),
       secondaryProcedures: updatedSecProcedures ? updatedSecProcedures.join(',') : secondaryProcedures.join(','),
-      partners: JSON.stringify(updatedPartners || partners)
+      partners: JSON.stringify(updatedPartners || partners),
+      masterUsername,
+      masterPassword
     };
     google.script.run.withSuccessHandler(() => setSavingSettings(false)).updateUserSettings(settings);
     localStorage.setItem('saas_settings', JSON.stringify(settings));
@@ -588,15 +610,39 @@ const App: React.FC = () => {
           <div className="space-y-4">
             <div className="relative">
               <UserRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <select value={loginUser} onChange={(e) => setLoginUser(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none transition-all focus:border-[var(--primary-color)]">
-                <option value="danielediasnails" className="font-bold">Daniele Dias</option>
-                {partners.map(p => <option key={p.login} value={p.login}>{p.name}</option>)}
-              </select>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div>
+              <input 
+                type="text" 
+                value={loginUser} 
+                onChange={(e) => setLoginUser(e.target.value)} 
+                placeholder="Seu usuário" 
+                className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} 
+              />
             </div>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Sua senha" className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} />
+              <input 
+                type="password" 
+                value={loginPass} 
+                onChange={(e) => setLoginPass(e.target.value)} 
+                placeholder="Sua senha" 
+                className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} 
+              />
+            </div>
+
+            {/* Checkbox Lembre-se de Mim */}
+            <div className="flex items-center gap-3 px-1">
+              <label className="relative flex items-center cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  checked={rememberMe} 
+                  onChange={(e) => setRememberMe(e.target.checked)} 
+                  className="peer hidden" 
+                />
+                <div className="w-5 h-5 border-2 border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-800 transition-all peer-checked:bg-[var(--primary-color)] peer-checked:border-[var(--primary-color)] flex items-center justify-center">
+                  <CheckCircle2 size={12} className={`text-white transition-opacity ${rememberMe ? 'opacity-100' : 'opacity-0'}`} />
+                </div>
+                <span className="ml-3 text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-[var(--primary-color)] transition-colors">Lembre-se de Mim</span>
+              </label>
             </div>
           </div>
           <div className="space-y-4">
@@ -779,7 +825,7 @@ const App: React.FC = () => {
               <div className="p-4 sm:p-8 bg-slate-50 dark:bg-slate-800/30 rounded-[2rem] space-y-5 border border-slate-100 dark:border-slate-800">
                  <div className="flex justify-between items-center"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Progresso Anual</span><button onClick={() => { setIsEditingLimit(!isEditingLimit); setEditLimitValue(annualLimit.toString()); }} className="p-2 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={12} /></button></div>
                  {isEditingLimit ? (
-                   <div className="flex flex-wrap gap-2 animate-in slide-in-from-top-2 w-full">
+                   <div className="flex flex-wrap sm:flex-nowrap gap-2 animate-in slide-in-from-top-2 w-full">
                       <input type="number" value={editLimitValue} onChange={(e) => setEditLimitValue(e.target.value)} className="flex-1 min-w-0 p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 text-sm font-bold outline-none border-2 border-[var(--primary-color)]" />
                       <button onClick={handleSaveNewLimit} className="shrink-0 p-3 sm:p-4 gold-gradient text-white rounded-2xl active:scale-95 transition-all"><CheckCircle2 size={20} /></button>
                    </div>
@@ -999,7 +1045,7 @@ const App: React.FC = () => {
                     {editingPartnerIndex === i ? (
                       <div className="w-full flex flex-col gap-3">
                          <div className="flex flex-col sm:flex-row gap-2">
-                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" />
+                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)] min-w-0" />
                             <input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" type="text" placeholder="Senha" />
                          </div>
                          <div className="flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
@@ -1021,19 +1067,18 @@ const App: React.FC = () => {
                       </div>
                     ) : (
                       <>
-                         <div className="flex items-center gap-3 sm:gap-4">
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center"><HardHat size={20} /></div>
-                            <div>
-                               <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{p.name}</p>
+                         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center shrink-0"><HardHat size={20} /></div>
+                            <div className="min-w-0 flex-1">
+                               <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p>
                                <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 px-2 py-0.5 rounded-full">{p.commission}%</span>
-                                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Login: {p.login}</span>
+                                  <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 px-2 py-0.5 rounded-full shrink-0">{p.commission}%</span>
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">Login: {p.login}</span>
                                </div>
                             </div>
                          </div>
-                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
                             <button onClick={() => { setEditingPartnerIndex(i); setEditPartnerName(p.name); setEditPartnerPass(p.password); setEditPartnerCommission(p.commission || 50); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button>
-                            {/* Fix: use correct loop variable 'i' instead of undefined 'index' */}
                             <button onClick={() => handleDeletePartner(i)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
                          </div>
                       </>
@@ -1057,7 +1102,7 @@ const App: React.FC = () => {
                 <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400"><X size={20} /></button>
              </div>
 
-             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+             <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                    <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Studio</label>
@@ -1066,6 +1111,34 @@ const App: React.FC = () => {
                    <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Subtítulo</label>
                       <input value={studioSubtitle} onChange={e => setStudioSubtitle(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" />
+                   </div>
+                </div>
+
+                {/* Acesso Master */}
+                <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-[2rem] space-y-4 border border-amber-100 dark:border-amber-900/30">
+                   <div className="flex items-center gap-2">
+                      <ShieldCheck size={18} className="text-amber-500" />
+                      <h3 className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Acesso Master</h3>
+                   </div>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                         <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Usuário Master</label>
+                         <input 
+                           type="text" 
+                           value={masterUsername} 
+                           onChange={e => setMasterUsername(e.target.value)} 
+                           className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" 
+                         />
+                      </div>
+                      <div className="space-y-1">
+                         <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Senha Master</label>
+                         <input 
+                           type="text" 
+                           value={masterPassword} 
+                           onChange={e => setMasterPassword(e.target.value)} 
+                           className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" 
+                         />
+                      </div>
                    </div>
                 </div>
 
