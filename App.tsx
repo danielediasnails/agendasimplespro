@@ -171,7 +171,7 @@ const App: React.FC = () => {
 
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loginError, setLoginError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -233,26 +233,45 @@ const App: React.FC = () => {
   const [historyPartnerFilter, setHistoryPartnerFilter] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Carrega credenciais lembradas ao iniciar
+  useEffect(() => {
+    const savedCreds = localStorage.getItem('studio_remembered_creds');
+    if (savedCreds) {
+      try {
+        const { user, pass } = JSON.parse(savedCreds);
+        setLoginUser(user);
+        setLoginPass(pass);
+        setRememberMe(true);
+      } catch (e) {
+        console.error("Erro ao carregar credenciais", e);
+      }
+    }
+  }, []);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     let newAuth: AuthState | null = null;
     const normalizedTypedLogin = loginUser.trim().toLowerCase();
     
-    // Check against Master Credentials
+    // Verifica contra Credenciais Master dinâmicas
     if (normalizedTypedLogin === masterUsername.toLowerCase() && loginPass === masterPassword) {
       newAuth = { isAuthenticated: true, role: 'master', username: 'Daniele Dias' };
     } else {
-      // Check against Partners
+      // Verifica contra Parceiras
       const foundPartner = partners.find(p => p.login === normalizedTypedLogin && p.password === loginPass);
       if (foundPartner) newAuth = { isAuthenticated: true, role: 'partner', username: foundPartner.name };
     }
 
     if (newAuth) {
       setAuth(newAuth);
+      
+      // Gerenciamento do Lembre-se de Mim
       if (rememberMe) {
         localStorage.setItem('studio_auth_data', JSON.stringify(newAuth));
+        localStorage.setItem('studio_remembered_creds', JSON.stringify({ user: loginUser, pass: loginPass }));
       } else {
         localStorage.removeItem('studio_auth_data');
+        localStorage.removeItem('studio_remembered_creds');
       }
       setLoginError(false);
     } else {
@@ -264,8 +283,13 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('studio_auth_data');
     setAuth({ isAuthenticated: false, role: null, username: null });
-    setLoginUser('');
-    setLoginPass('');
+    
+    // Mantém os campos preenchidos se o Lembre-se de mim estiver ativo
+    const savedCreds = localStorage.getItem('studio_remembered_creds');
+    if (!savedCreds) {
+      setLoginUser('');
+      setLoginPass('');
+    }
     setIsMenuOpen(false);
   };
 
