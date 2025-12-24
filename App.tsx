@@ -178,7 +178,7 @@ const WEEKS = ['Todo', 'S1', 'S2', 'S3', 'S4', 'S5'];
 const DAYS_OF_MONTH = ['Todo', ...Array.from({ length: 31 }, (_, i) => (i + 1).toString())];
 const DAYS_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const YEARS = Array.from({ length: 2100 - 2025 + 1 }, (_, i) => 2025 + i);
-const EXPENSE_YEARS = Array.from({ length: 2100 - 2026 + 1 }, (_, i) => 2026 + i);
+const EXPENSE_YEARS = Array.from({ length: 2100 - 2025 + 1 }, (_, i) => 2025 + i);
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>(() => {
@@ -237,18 +237,15 @@ const App: React.FC = () => {
   const [financeDay, setFinanceDay] = useState(0); 
   
   const currentYear = new Date().getFullYear();
-  const [expenseYear, setExpenseYear] = useState(currentYear < 2026 ? 2026 : currentYear);
+  const [expenseYear, setExpenseYear] = useState(currentYear);
   const [expenseMonth, setExpenseMonth] = useState(new Date().getMonth());
   const [expenseWeek, setExpenseWeek] = useState(0);
   const [expenseDay, setExpenseDay] = useState(0);
+  
   const [newExpName, setNewExpName] = useState('');
   const [newExpValue, setNewExpValue] = useState('');
   const [newExpPaymentMethod, setNewExpPaymentMethod] = useState<PaymentMethod>('Pix');
-  
-  const initialExpDate = currentYear < 2026 
-    ? `2026-01-01` 
-    : new Date().toISOString().split('T')[0];
-  const [newExpDate, setNewExpDate] = useState(initialExpDate);
+  const [newExpDate, setNewExpDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [clientSearch, setClientSearch] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
@@ -403,95 +400,9 @@ const App: React.FC = () => {
       .getUserData();
   }, [auth.isAuthenticated]);
 
-  const filteredAppointments = useMemo(() => {
-    let base = appointments;
-    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
-    if (searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase().trim();
-      return base.filter(app => (app.clientName && app.clientName.toLowerCase().includes(q)) || (app.whatsapp && app.whatsapp.includes(q)) || (app.procedure && app.procedure.toLowerCase().includes(q)))
-        .sort((a, b) => b.date.localeCompare(a.date) || a.time.localeCompare(b.time));
-    }
-    return base.filter(app => app.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time));
-  }, [appointments, selectedDate, searchQuery, auth]);
-
-  const currentPartnerCommission = useMemo(() => {
-    if (auth.role === 'partner' && auth.username) {
-      const p = partners.find(p => p.name === auth.username);
-      return p?.commission || 50;
-    }
-    return 100;
-  }, [auth, partners]);
-
-  const quickSummary = useMemo(() => {
-    let base = appointments;
-    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
-    
-    const filtered = base.filter(app => {
-      const d = new Date(app.date + 'T12:00:00');
-      return d.getMonth() === quickReportMonth && d.getFullYear() === quickReportYear;
-    });
-
-    const total = filtered.reduce((sum, app) => {
-      const val = (Number(app.totalValue || 0) + Number(app.deposit || 0));
-      const commission = auth.role === 'partner' ? currentPartnerCommission : 100;
-      return sum + (val * (commission / 100));
-    }, 0);
-
-    return { count: filtered.length, total };
-  }, [appointments, quickReportMonth, quickReportYear, auth, currentPartnerCommission]);
-
-  const groupedHistory = useMemo<Record<string, Appointment[]>>(() => {
-    let base = appointments.slice().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
-    if (historyPartnerFilter !== 'all') base = base.filter(app => app.partnerName === historyPartnerFilter);
-    
-    if (historySearchQuery.trim()) {
-      const q = historySearchQuery.toLowerCase().trim();
-      base = base.filter(app => 
-        (app.clientName && app.clientName.toLowerCase().includes(q)) || 
-        (app.procedure && app.procedure.toLowerCase().includes(q)) ||
-        (app.whatsapp && app.whatsapp.includes(q))
-      );
-    }
-
-    const groups: Record<string, Appointment[]> = {};
-    base.forEach(app => {
-      if (!groups[app.date]) groups[app.date] = [];
-      groups[app.date].push(app);
-    });
-    const sortedGroups: Record<string, Appointment[]> = {};
-    Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(key => { sortedGroups[key] = groups[key]; });
-    return sortedGroups;
-  }, [appointments, historyPartnerFilter, historySearchQuery]);
-
-  const calculateTotal = (apps: Appointment[], commission: number = 100) => {
-    return apps.reduce((sum, app) => {
-      const val = (Number(app.totalValue || 0) + Number(app.deposit || 0));
-      return sum + (val * (commission / 100));
-    }, 0);
-  };
-
   const getWeekOfMonth = (date: Date) => Math.ceil(date.getDate() / 7);
 
-  const filterSummaryData = (apps: Appointment[], day: number, week: number, month: number, year: number) => {
-    return apps.filter(app => {
-      const d = new Date(app.date + 'T12:00:00');
-      if (d.getFullYear() !== year || d.getMonth() !== month) return false;
-      if (day !== 0) return d.getDate() === day;
-      if (week !== 0) return getWeekOfMonth(d) === week;
-      return true;
-    });
-  };
-
-  const filteredAppsForSummary = useMemo(() => {
-    let base = appointments;
-    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
-    return filterSummaryData(base, financeDay, financeWeek, financeMonth, financeYear);
-  }, [appointments, financeDay, financeWeek, financeMonth, financeYear]);
-
-  const monthlySummary = useMemo(() => {
-    return { count: filteredAppsForSummary.length, total: calculateTotal(filteredAppsForSummary, currentPartnerCommission) };
-  }, [filteredAppsForSummary, currentPartnerCommission]);
-
+  // --- LOGICA DE DESPESAS ---
   const filteredExpenses = useMemo(() => {
     return expenses.filter(exp => {
       const d = new Date(exp.date + 'T12:00:00');
@@ -508,6 +419,18 @@ const App: React.FC = () => {
       return d.getFullYear() === expenseYear && d.getMonth() === expenseMonth;
     }).reduce((sum, exp) => sum + Number(exp.value || 0), 0);
   }, [expenses, expenseMonth, expenseYear]);
+
+  const financeWeekLabels = useMemo(() => {
+    const m = (financeMonth + 1).toString().padStart(2, '0');
+    const lastDay = new Date(financeYear, financeMonth + 1, 0).getDate();
+    return [
+      `01-07/${m}`,
+      `08-14/${m}`,
+      `15-21/${m}`,
+      `22-28/${m}`,
+      `29-${lastDay.toString().padStart(2, '0')}/${m}`
+    ];
+  }, [financeMonth, financeYear]);
 
   const chartExpensesMonthly = useMemo<number[]>(() => {
     const weeks = [0, 0, 0, 0, 0];
@@ -536,19 +459,29 @@ const App: React.FC = () => {
   }, [expenses, expenseMonth, expenseYear, expenseWeek, expenseDay]);
 
   const handleAddExpense = () => {
-    const valNum = parseFloat(newExpValue);
+    const valNum = parseFloat(newExpValue.replace(',', '.'));
     if (!newExpName.trim() || isNaN(valNum)) {
       alert("Por favor, preencha o nome e um valor válido.");
       return;
     }
-    const expData = { name: newExpName.trim(), value: valNum, date: newExpDate, paymentMethod: newExpPaymentMethod };
+
+    const expData = { 
+      name: newExpName.trim(), 
+      value: valNum, 
+      date: newExpDate, 
+      paymentMethod: newExpPaymentMethod 
+    };
+
     google.script.run.withSuccessHandler((saved: Expense) => {
       if (saved) {
         setExpenses(prev => [...prev, saved]);
         setNewExpName(''); 
         setNewExpValue('');
         setNewExpPaymentMethod('Pix');
-        setNewExpDate(initialExpDate);
+        // Sincroniza o filtro para o mês da nova despesa para ela aparecer imediatamente
+        const d = new Date(saved.date + 'T12:00:00');
+        setExpenseMonth(d.getMonth());
+        setExpenseYear(d.getFullYear());
       }
     }).saveExpense(expData);
   };
@@ -560,6 +493,64 @@ const App: React.FC = () => {
       }).deleteExpense(id);
     }
   };
+
+  // --- LOGICA DE FILTROS AGENDAMENTOS ---
+  const filteredAppointments = useMemo(() => {
+    let base = appointments;
+    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
+    if (searchQuery.trim().length > 0) {
+      const q = searchQuery.toLowerCase().trim();
+      return base.filter(app => (app.clientName && app.clientName.toLowerCase().includes(q)) || (app.whatsapp && app.whatsapp.includes(q)) || (app.procedure && app.procedure.toLowerCase().includes(q)))
+        .sort((a, b) => b.date.localeCompare(a.date) || a.time.localeCompare(b.time));
+    }
+    return base.filter(app => app.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time));
+  }, [appointments, selectedDate, searchQuery, auth]);
+
+  const currentPartnerCommission = useMemo(() => {
+    if (auth.role === 'partner' && auth.username) {
+      const p = partners.find(p => p.name === auth.username);
+      return p?.commission || 50;
+    }
+    return 100;
+  }, [auth, partners]);
+
+  const quickSummary = useMemo(() => {
+    let base = appointments;
+    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
+    const filtered = base.filter(app => {
+      const d = new Date(app.date + 'T12:00:00');
+      return d.getMonth() === quickReportMonth && d.getFullYear() === quickReportYear;
+    });
+    const total = filtered.reduce((sum, app) => {
+      const val = (Number(app.totalValue || 0) + Number(app.deposit || 0));
+      const commission = auth.role === 'partner' ? currentPartnerCommission : 100;
+      return sum + (val * (commission / 100));
+    }, 0);
+    return { count: filtered.length, total };
+  }, [appointments, quickReportMonth, quickReportYear, auth, currentPartnerCommission]);
+
+  const calculateTotal = (apps: Appointment[], commission: number = 100) => {
+    return apps.reduce((sum, app) => {
+      const val = (Number(app.totalValue || 0) + Number(app.deposit || 0));
+      return sum + (val * (commission / 100));
+    }, 0);
+  };
+
+  const filteredAppsForSummary = useMemo(() => {
+    let base = appointments;
+    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
+    return base.filter(app => {
+      const d = new Date(app.date + 'T12:00:00');
+      if (d.getFullYear() !== financeYear || d.getMonth() !== financeMonth) return false;
+      if (financeDay !== 0) return d.getDate() === financeDay;
+      if (financeWeek !== 0) return getWeekOfMonth(d) === financeWeek;
+      return true;
+    });
+  }, [appointments, financeDay, financeWeek, financeMonth, financeYear, auth]);
+
+  const monthlySummary = useMemo(() => {
+    return { count: filteredAppsForSummary.length, total: calculateTotal(filteredAppsForSummary, currentPartnerCommission) };
+  }, [filteredAppsForSummary, currentPartnerCommission]);
 
   const chartDataMonthly = useMemo<number[]>(() => {
     const weeks = [0, 0, 0, 0, 0];
@@ -596,18 +587,6 @@ const App: React.FC = () => {
     return { total, limit: annualLimit, percentage, remaining: Math.max(0, annualLimit - total), isNearLimit: total > annualLimit * 0.85 };
   }, [appointments, annualLimit, financeYear, currentPartnerCommission, auth]);
 
-  const financeWeekLabels = useMemo(() => {
-    const m = (financeMonth + 1).toString().padStart(2, '0');
-    const lastDay = new Date(financeYear, financeMonth + 1, 0).getDate();
-    return [
-      `01-07/${m}`,
-      `08-14/${m}`,
-      `15-21/${m}`,
-      `22-28/${m}`,
-      `29-${lastDay.toString().padStart(2, '0')}/${m}`
-    ];
-  }, [financeMonth, financeYear]);
-
   const handleSaveAppointment = (appData: Omit<Appointment, 'id' | 'createdAt'>) => {
     const tempId = editingAppointment?.id;
     google.script.run.withSuccessHandler((savedApp: Appointment) => {
@@ -637,6 +616,45 @@ const App: React.FC = () => {
     }).deleteAppointment(appointmentToDelete);
   };
 
+  const groupedHistory = useMemo<Record<string, Appointment[]>>(() => {
+    let base = appointments.slice().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    if (historyPartnerFilter !== 'all') base = base.filter(app => app.partnerName === historyPartnerFilter);
+    if (historySearchQuery.trim()) {
+      const q = historySearchQuery.toLowerCase().trim();
+      base = base.filter(app => (app.clientName && app.clientName.toLowerCase().includes(q)) || (app.procedure && app.procedure.toLowerCase().includes(q)) || (app.whatsapp && app.whatsapp.includes(q)));
+    }
+    const groups: Record<string, Appointment[]> = {};
+    base.forEach(app => {
+      if (!groups[app.date]) groups[app.date] = [];
+      groups[app.date].push(app);
+    });
+    const sortedGroups: Record<string, Appointment[]> = {};
+    Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(key => { sortedGroups[key] = groups[key]; });
+    return sortedGroups;
+  }, [appointments, historyPartnerFilter, historySearchQuery]);
+
+  const persistSettings = (opts: { updatedProcedures?: string[], updatedSecProcedures?: string[], updatedAnnualLimit?: number, updatedPartners?: Partner[] } = {}) => {
+    const { updatedProcedures, updatedSecProcedures, updatedAnnualLimit, updatedPartners } = opts;
+    const settings = { 
+      studioName, studioSubtitle, studioIcon, themeId: currentTheme.id, themeMode, customColor,
+      annualLimit: updatedAnnualLimit !== undefined ? updatedAnnualLimit.toString() : annualLimit.toString(),
+      userTimes: (userTimes || []).join(','),
+      procedures: updatedProcedures ? updatedProcedures.join(',') : (procedures || []).join(','),
+      secondaryProcedures: updatedSecProcedures ? updatedSecProcedures.join(',') : (secondaryProcedures || []).join(','),
+      partners: JSON.stringify(updatedPartners || partners),
+      masterUsername,
+      masterPassword
+    };
+    google.script.run.withSuccessHandler(() => setSavingSettings(false)).updateUserSettings(settings);
+    localStorage.setItem('saas_settings', JSON.stringify(settings));
+  };
+
+  const saveSettings = () => { setSavingSettings(true); persistSettings(); setIsSettingsOpen(false); };
+  const handleSaveNewLimit = () => {
+    const newVal = parseFloat(editLimitValue);
+    if (!isNaN(newVal) && newVal > 0) { setAnnualLimit(newVal); persistSettings({ updatedAnnualLimit: newVal }); setIsEditingLimit(false); }
+  };
+
   const handleUpdateClient = (oldName: string) => {
     const newData = { name: editClientName.trim(), whatsapp: editClientPhone.trim() };
     if (!newData.name) return;
@@ -653,32 +671,6 @@ const App: React.FC = () => {
         setClients(prev => prev.filter(c => c.name.trim().toLowerCase() !== name.trim().toLowerCase()));
       }).deleteClient(name);
     }
-  };
-
-  const persistSettings = (opts: { updatedProcedures?: string[], updatedSecProcedures?: string[], updatedAnnualLimit?: number, updatedPartners?: Partner[] } = {}) => {
-    const { updatedProcedures, updatedSecProcedures, updatedAnnualLimit, updatedPartners } = opts;
-    const safeProcedures = Array.isArray(procedures) ? procedures : [];
-    const safeSecProcedures = Array.isArray(secondaryProcedures) ? secondaryProcedures : [];
-    const safeUserTimes = Array.isArray(userTimes) ? userTimes : [];
-
-    const settings = { 
-      studioName, studioSubtitle, studioIcon, themeId: currentTheme.id, themeMode, customColor,
-      annualLimit: updatedAnnualLimit !== undefined ? updatedAnnualLimit.toString() : annualLimit.toString(),
-      userTimes: safeUserTimes.join(','),
-      procedures: updatedProcedures ? updatedProcedures.join(',') : safeProcedures.join(','),
-      secondaryProcedures: updatedSecProcedures ? updatedSecProcedures.join(',') : safeSecProcedures.join(','),
-      partners: JSON.stringify(updatedPartners || partners),
-      masterUsername,
-      masterPassword
-    };
-    google.script.run.withSuccessHandler(() => setSavingSettings(false)).updateUserSettings(settings);
-    localStorage.setItem('saas_settings', JSON.stringify(settings));
-  };
-
-  const saveSettings = () => { setSavingSettings(true); persistSettings(); setIsSettingsOpen(false); };
-  const handleSaveNewLimit = () => {
-    const newVal = parseFloat(editLimitValue);
-    if (!isNaN(newVal) && newVal > 0) { setAnnualLimit(newVal); persistSettings({ updatedAnnualLimit: newVal }); setIsEditingLimit(false); }
   };
 
   const handleAddProcedure = () => {
@@ -754,7 +746,8 @@ const App: React.FC = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center gap-4">
-      <Loader2 className="w-10 h-10 animate-spin text-[var(--primary-color)]" /><p className="text-slate-400 font-medium uppercase tracking-[0.2em] text-[10px]">Conectando ao Firebase...</p>
+      <Loader2 className="w-10 h-10 animate-spin text-[var(--primary-color)]" />
+      <p className="text-slate-400 font-medium uppercase tracking-[0.2em] text-[10px]">Conectando ao Firebase...</p>
     </div>
   );
 
@@ -887,6 +880,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
+      {/* Menu Principal lateral */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[100] flex justify-end">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)}></div>
@@ -931,6 +925,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL DESPESAS */}
       {isExpensesOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-6 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -954,7 +949,7 @@ const App: React.FC = () => {
                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">O que comprou?</label><input value={newExpName} onChange={e => setNewExpName(e.target.value)} placeholder="Descrição da despesa" className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold outline-none focus:ring-1 ring-[var(--primary-color)] shadow-sm" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Forma de Pagamento</label><div className="grid grid-cols-3 gap-2">{PAYMENT_METHODS.map(m => (<button key={m} type="button" onClick={() => setNewExpPaymentMethod(m as PaymentMethod)} className={`py-2.5 rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all border ${newExpPaymentMethod === m ? 'border-red-500 bg-red-500 text-white shadow-md' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400'}`}>{m}</button>))}</div></div>
-                  <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Valor</label><input type="number" step="0.01" value={newExpValue} onChange={e => setNewExpValue(e.target.value)} placeholder="0,00" className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold outline-none focus:ring-1 ring-red-400 shadow-sm" /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Data</label><input type="date" value={newExpDate} onChange={e => setNewExpDate(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold focus:ring-1 ring-emerald-400 shadow-sm outline-none" /></div></div>
+                  <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Valor</label><input type="text" value={newExpValue} onChange={e => setNewExpValue(e.target.value)} placeholder="0,00" className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold outline-none focus:ring-1 ring-red-400 shadow-sm" /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Data</label><input type="date" value={newExpDate} onChange={e => setNewExpDate(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold focus:ring-1 ring-emerald-400 shadow-sm outline-none" /></div></div>
                </div>
                <button onClick={handleAddExpense} className="w-full bg-red-500 text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all mt-2"><Plus size={16} /> Adicionar Despesa</button>
             </div>
@@ -986,6 +981,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* FINANCEIRO MODAL */}
       {isFinanceOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -1074,100 +1070,9 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {isHistoryOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 flex flex-col animate-in zoom-in-95 duration-300 max-h-[90vh]">
-             <div className="flex justify-between items-center mb-6 shrink-0"><div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Histórico Geral</h2><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Busca e registros passados</p></div><button onClick={() => setIsHistoryOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button></div>
-             <div className="space-y-4 mb-6 shrink-0"><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" value={historySearchQuery} onChange={(e) => setHistorySearchQuery(e.target.value)} placeholder="Procurar no histórico..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] shadow-inner" /></div><div className="flex items-center gap-3 overflow-x-auto pb-1 custom-scrollbar"><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Filtrar por:</span><select value={historyPartnerFilter} onChange={(e) => setHistoryPartnerFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-800 text-[10px] font-bold p-2.5 rounded-xl outline-none border border-slate-200 dark:border-slate-700"><option value="all">Todas Profissionais</option><option value="Daniele Dias">Daniele Dias</option>{partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}</select></div></div>
-             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-10">
-                {Object.keys(groupedHistory).length > 0 ? (Object.entries(groupedHistory) as [string, Appointment[]][]).map(([date, apps]) => (
-                  <div key={date} className="space-y-4">
-                    <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-3 px-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm"><div className="flex items-center gap-2"><CalendarDays size={14} className="text-[var(--primary-color)]" /><h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 dark:text-slate-200">{formatHistoryDate(date)}</h3></div><span className="text-[9px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700">{(apps as Appointment[]).length} Registros</span></div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{(apps as Appointment[]).map(app => (<AgendaItem key={app.id} appointment={app} isHistory onDelete={() => confirmDeleteAppointment(app.id)} onEdit={() => { setEditingAppointment(app); setIsFormOpen(true); setIsHistoryOpen(false); }} daysSinceLastVisit={null}/>))}</div>
-                  </div>
-                )) : (<div className="flex flex-col items-center justify-center py-20 text-slate-300 opacity-50 space-y-4"><HistoryIcon size={48} /><p className="font-bold uppercase tracking-widest text-xs">Nenhum registro encontrado</p></div>)}
-             </div>
-          </div>
-        </div>
-      )}
-
-      {isProceduresOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300">
-             <div className="flex justify-between items-center"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Procedimentos</h2><button onClick={() => setIsProceduresOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button></div>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Principais</p>
-                   <div className="flex gap-2"><input value={newProcName} onChange={e => setNewProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" /><button onClick={handleAddProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
-                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">{(procedures as string[]).map(p => (<div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group"><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span><button onClick={() => handleRemoveProcedure(p)} className="opacity-0 group-hover:opacity-100 transition-all text-red-400"><X size={14} /></button></div>))}</div>
-                </div>
-                <div className="space-y-4">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Secundários</p>
-                   <div className="flex gap-2"><input value={newSecProcName} onChange={e => setNewSecProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" /><button onClick={handleAddSecondaryProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
-                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">{(secondaryProcedures as string[]).map(p => (<div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group"><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span><button onClick={() => handleRemoveSecondaryProcedure(p)} className="opacity-0 group-hover:opacity-100 transition-all text-red-400"><X size={14} /></button></div>))}</div>
-                </div>
-             </div>
-          </div>
-        </div>
-      )}
-
-      {isPartnersOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
-             <div className="flex justify-between items-center shrink-0"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Equipe</h2><button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button></div>
-             <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Profissional</p>
-                <div className="grid grid-cols-2 gap-3">
-                   <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Nome" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
-                   <input value={newPartnerPass} onChange={e => setNewPartnerPass(e.target.value)} placeholder="Senha" type="text" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
-                   <div className="col-span-2 flex flex-col bg-white dark:bg-slate-900 p-5 rounded-2xl">
-                      <div className="flex flex-col"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissão Porcentagem</span><p className="text-[8px] text-slate-400 uppercase tracking-widest mt-1.5">Escolha a porcentagem</p></div>
-                      <div className="relative mt-3"><select value={newPartnerCommission} onChange={e => setNewPartnerCommission(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-3.5 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">{Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (<option key={val} value={val}>{val}%</option>))}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div></div>
-                   </div>
-                </div>
-                <button onClick={handleAddPartner} className="w-full gold-gradient text-white py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest shadow-lg">Cadastrar Parceira</button>
-             </div>
-             <div className="space-y-4">
-                {(partners as Partner[]).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
-                    {editingPartnerIndex === i ? (
-                      <div className="w-full flex flex-col gap-3">
-                         <div className="flex flex-col sm:flex-row gap-2"><input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)] min-w-0" /><input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" type="text" placeholder="Senha" /></div>
-                         <div className="flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800"><div className="flex flex-col"><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Alterar Comissão</span></div><div className="flex items-center gap-3"><div className="relative flex-1"><select value={editPartnerCommission} onChange={e => setEditPartnerCommission(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-800 border-none rounded-xl py-3 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">{Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (<option key={val} value={val}>{val}%</option>))}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div></div><button onClick={() => handleUpdatePartner(i)} className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg active:scale-95 transition-all"><CheckCircle2 size={16} /></button></div></div>
-                      </div>
-                    ) : (
-                      <>
-                         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden"><div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center shrink-0"><HardHat size={20} /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p><div className="flex items-center gap-2"><span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 px-2 py-0.5 rounded-full shrink-0">{p.commission}%</span><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">Login: {p.login}</span></div></div></div>
-                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0"><button onClick={() => { setEditingPartnerIndex(i); setEditPartnerName(p.name); setEditPartnerPass(p.password); setEditPartnerCommission(p.commission || 50); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button><button onClick={() => handleDeletePartner(i)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button></div>
-                      </>
-                    )}
-                  </div>
-                ))}
-             </div>
-          </div>
-        </div>
-      )}
-
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
-             <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 shrink-0"><div><h2 className="text-lg font-bold dark:text-white uppercase tracking-tight">Ajustes Studio</h2><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Configurações visuais</p></div><button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400"><X size={20} /></button></div>
-             <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Studio</label><input value={studioName} onChange={e => setStudioName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" /></div>
-                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Subtítulo</label><input value={studioSubtitle} onChange={e => setStudioSubtitle(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" /></div>
-                </div>
-                <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-[2rem] space-y-4 border border-amber-100 dark:border-amber-900/30"><div className="flex items-center gap-2"><ShieldCheck size={18} className="text-amber-500" /><h3 className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Acesso Master</h3></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div className="space-y-1"><label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Usuário Master</label><input type="text" value={masterUsername} onChange={e => setMasterUsername(e.target.value)} className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" /></div><div className="space-y-1"><label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Senha Master</label><input type="text" value={masterPassword} onChange={e => setMasterPassword(e.target.value)} className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" /></div></div></div>
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800"><div className="flex items-center justify-between mb-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ícone de Marca</label><button onClick={() => setIsIconsExpanded(!isIconsExpanded)} className="text-[9px] font-bold text-[var(--primary-color)] uppercase tracking-widest flex items-center gap-1">{isIconsExpanded ? <><ChevronUp size={12} /> Menos</> : <><ChevronDown size={12} /> Todos</>}</button></div><div className="flex flex-wrap justify-center gap-2">{BRAND_ICON_OPTIONS.slice(0, isIconsExpanded ? 20 : 7).map(iconKey => (<button key={iconKey} onClick={() => setStudioIcon(iconKey)} className={`p-2 rounded-xl transition-all ${studioIcon === iconKey ? 'bg-[var(--primary-color)] text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-400 hover:scale-110'}`}>{React.cloneElement(BEAUTY_ICONS[iconKey] as React.ReactElement<any>, { size: 14 })}</button>))}</div></div>
-                <div className="space-y-3"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Estilo Visual</label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{COLOR_PALETTES.map(palette => (<button key={palette.id} onClick={() => setCurrentTheme(palette)} className={`flex items-center gap-2 p-2 rounded-xl border-2 transition-all ${currentTheme.id === palette.id ? 'border-[var(--primary-color)] bg-white dark:bg-slate-800' : 'border-transparent bg-slate-50 dark:bg-slate-900'}`}><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: palette.id === 'custom' ? customColor : palette.primary }} /><span className="text-[10px] font-bold truncate">{palette.name}</span></button>))}</div>{currentTheme.id === 'custom' && (<div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2"><div className="flex items-center gap-3"><input type="color" value={customColor} onChange={(e) => setCustomColor(e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-none p-0 bg-transparent outline-none" /><div className="flex-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">Cor Personalizada</span><div className="flex items-center gap-2"><PipetteIcon size={12} className="text-slate-400" /><span className="text-[10px] font-mono font-bold uppercase text-slate-600 dark:text-slate-300">{customColor}</span></div></div></div></div>)}</div>
-             </div>
-             <div className="p-6 border-t dark:border-slate-800 shrink-0"><button onClick={saveSettings} disabled={savingSettings} className="w-full gold-gradient text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-[0.2em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all">{savingSettings ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /><span>Salvar Alterações</span></>}</button></div>
-          </div>
-        </div>
-      )}
-
       {isFormOpen && <AppointmentForm onClose={() => { setIsFormOpen(false); setEditingAppointment(null); }} onSubmit={handleSaveAppointment} onDelete={confirmDeleteAppointment} initialDate={selectedDate} availableProcedures={procedures} availableSecondaryProcedures={secondaryProcedures} editingData={editingAppointment} clients={clients} userTimes={userTimes} onUpdateUserTimes={setUserTimes} allAppointments={appointments} availablePartners={partners} />}
       {sharingAppointment && <ShareModal appointment={sharingAppointment} onClose={() => setSharingAppointment(null)} isManualShare={isManualShare} />}
+      
       {appointmentToDelete && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-sm p-8 text-center space-y-6">
