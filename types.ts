@@ -30,6 +30,15 @@ export interface Appointment {
   partnerName?: string; // Nome da parceira responsável
 }
 
+export interface Expense {
+  id: string;
+  name: string;
+  value: number;
+  paymentMethod: PaymentMethod;
+  date: string; // YYYY-MM-DD
+  createdAt: number;
+}
+
 export enum TimeMode {
   STANDARD = 'STANDARD',
   FREE = 'FREE',
