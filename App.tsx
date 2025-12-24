@@ -15,7 +15,7 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import { Appointment, Client, PaymentMethod, Partner, Expense } from './types';
-import { DEFAULT_PROCEDURES, DEFAULT_SECONDARY_PROCEDURES, COLOR_PALETTES, ThemePalette, MEI_LIMIT, DEFAULT_PARTNERS, PAYMENT_METHODS } from './constants';
+import { DEFAULT_PROCEDURES, DEFAULT_SECONDARY_PROCEDURES, COLOR_PALETTES, ThemePalette, MEI_LIMIT, DEFAULT_PARTNERS, PAYMENT_METHODS, STANDARD_TIMES, FREE_TIMES } from './constants';
 import SummaryCard from './components/SummaryCard';
 import AppointmentForm from './components/AppointmentForm';
 import AgendaItem from './components/AgendaItem';
@@ -82,7 +82,9 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
         secondaryProcedures: DEFAULT_SECONDARY_PROCEDURES.join(','),
         partners: JSON.stringify(DEFAULT_PARTNERS),
         masterUsername: 'danielediasnails',
-        masterPassword: '@Jsloks147@'
+        masterPassword: '@Jsloks147@',
+        userTimes: STANDARD_TIMES.join(','),
+        freeTimes: FREE_TIMES.join(',')
       };
 
       result = {
@@ -178,7 +180,6 @@ const WEEKS = ['Todo', 'S1', 'S2', 'S3', 'S4', 'S5'];
 const DAYS_OF_MONTH = ['Todo', ...Array.from({ length: 31 }, (_, i) => (i + 1).toString())];
 const DAYS_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const YEARS = Array.from({ length: 2100 - 2025 + 1 }, (_, i) => 2025 + i);
-const EXPENSE_YEARS = Array.from({ length: 2100 - 2025 + 1 }, (_, i) => 2025 + i);
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>(() => {
@@ -202,9 +203,11 @@ const App: React.FC = () => {
   const [annualLimit, setAnnualLimit] = useState(MEI_LIMIT);
   const [masterUsername, setMasterUsername] = useState('danielediasnails');
   const [masterPassword, setMasterPassword] = useState('@Jsloks147@');
+  const [showMasterPass, setShowMasterPass] = useState(false);
 
   const [userEmail, setUserEmail] = useState('');
-  const [userTimes, setUserTimes] = useState<string[]>([]);
+  const [userTimes, setUserTimes] = useState<string[]>(STANDARD_TIMES);
+  const [userFreeTimes, setUserFreeTimes] = useState<string[]>(FREE_TIMES);
   const [currentTheme, setCurrentTheme] = useState<ThemePalette>(COLOR_PALETTES[0]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -217,20 +220,25 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  
+  // Modal states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isClientsOpen, setIsClientsOpen] = useState(false);
   const [isProceduresOpen, setIsProceduresOpen] = useState(false);
+  const [isTimesOpen, setIsTimesOpen] = useState(false);
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
   const [isExpensesOpen, setIsExpensesOpen] = useState(false);
   const [isPartnersOpen, setIsPartnersOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isIconsExpanded, setIsIconsExpanded] = useState(false);
+  
   const [appointmentToDelete, setAppointmentToDelete] = useState<string | null>(null);
   const [sharingAppointment, setSharingAppointment] = useState<Appointment | null>(null);
   const [isManualShare, setIsManualShare] = useState(false);
   const [isEditingLimit, setIsEditingLimit] = useState(false);
   const [editLimitValue, setEditLimitValue] = useState('');
+  
   const [financeYear, setFinanceYear] = useState(new Date().getFullYear());
   const [financeMonth, setFinanceMonth] = useState(new Date().getMonth());
   const [financeWeek, setFinanceWeek] = useState(0); 
@@ -249,11 +257,23 @@ const App: React.FC = () => {
 
   const [clientSearch, setClientSearch] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historyMonth, setHistoryMonth] = useState(new Date().getMonth());
+  const [historyYear, setHistoryYear] = useState(new Date().getFullYear());
+
   const [editingClientName, setEditingClientName] = useState<string | null>(null);
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
   const [newProcName, setNewProcName] = useState('');
   const [newSecProcName, setNewSecProcName] = useState('');
+  const [newTimeValue, setNewTimeValue] = useState('');
+  const [newFreeTimeValue, setNewFreeTimeValue] = useState('');
+
+  // Estados para edição individual de horários
+  const [editingTimeIndex, setEditingTimeIndex] = useState<number | null>(null);
+  const [editingFreeTimeIndex, setEditingFreeTimeIndex] = useState<number | null>(null);
+  const [editTimeNewValue, setEditTimeNewValue] = useState('');
+  const [editFreeTimeNewValue, setEditFreeTimeNewValue] = useState('');
+
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerPass, setNewPartnerPass] = useState('');
   const [newPartnerCommission, setNewPartnerCommission] = useState(50);
@@ -297,7 +317,7 @@ const App: React.FC = () => {
     if (normalizedTypedLogin === masterUsername.toLowerCase() && loginPass === masterPassword) {
       newAuth = { isAuthenticated: true, role: 'master', username: 'Daniele Dias' };
     } else {
-      const foundPartner = partners.find(p => p.login === normalizedTypedLogin && p.password === loginPass);
+      const foundPartner = (partners || []).find(p => p.login === normalizedTypedLogin && p.password === loginPass);
       if (foundPartner) newAuth = { isAuthenticated: true, role: 'partner', username: foundPartner.name };
     }
 
@@ -367,7 +387,12 @@ const App: React.FC = () => {
             if (data.settings.userTimes) {
               const utValue = data.settings.userTimes;
               const utStr = typeof utValue === 'string' ? utValue : (Array.isArray(utValue) ? utValue.join(',') : '');
-              setUserTimes(utStr.split(',').filter(Boolean));
+              setUserTimes(utStr.split(',').filter(Boolean).sort());
+            }
+            if (data.settings.freeTimes) {
+              const ftValue = data.settings.freeTimes;
+              const ftStr = typeof ftValue === 'string' ? ftValue : (Array.isArray(ftValue) ? ftValue.join(',') : '');
+              setUserFreeTimes(ftStr.split(',').filter(Boolean).sort());
             }
             if (data.settings.procedures) {
               const val = data.settings.procedures;
@@ -404,7 +429,7 @@ const App: React.FC = () => {
 
   // --- LOGICA DE DESPESAS ---
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(exp => {
+    return (expenses || []).filter(exp => {
       const d = new Date(exp.date + 'T12:00:00');
       if (d.getFullYear() !== expenseYear || d.getMonth() !== expenseMonth) return false;
       if (expenseDay !== 0) return d.getDate() === expenseDay;
@@ -414,7 +439,7 @@ const App: React.FC = () => {
   }, [expenses, expenseDay, expenseWeek, expenseMonth, expenseYear]);
 
   const monthlyExpensesTotal = useMemo(() => {
-    return expenses.filter(exp => {
+    return (expenses || []).filter(exp => {
       const d = new Date(exp.date + 'T12:00:00');
       return d.getFullYear() === expenseYear && d.getMonth() === expenseMonth;
     }).reduce((sum, exp) => sum + Number(exp.value || 0), 0);
@@ -434,7 +459,7 @@ const App: React.FC = () => {
 
   const chartExpensesMonthly = useMemo<number[]>(() => {
     const weeks = [0, 0, 0, 0, 0];
-    expenses.forEach(exp => {
+    (expenses || []).forEach(exp => {
       const d = new Date(exp.date + 'T12:00:00');
       if (d.getMonth() === expenseMonth && d.getFullYear() === expenseYear) {
         const weekIdx = getWeekOfMonth(d) - 1;
@@ -446,7 +471,7 @@ const App: React.FC = () => {
 
   const chartExpensesWeekly = useMemo<number[]>(() => {
     const days = [0, 0, 0, 0, 0, 0, 0];
-    expenses.forEach(exp => {
+    (expenses || []).forEach(exp => {
       const d = new Date(exp.date + 'T12:00:00');
       if (d.getMonth() === expenseMonth && d.getFullYear() === expenseYear) {
         const week = getWeekOfMonth(d);
@@ -478,7 +503,6 @@ const App: React.FC = () => {
         setNewExpName(''); 
         setNewExpValue('');
         setNewExpPaymentMethod('Pix');
-        // Sincroniza o filtro para o mês da nova despesa para ela aparecer imediatamente
         const d = new Date(saved.date + 'T12:00:00');
         setExpenseMonth(d.getMonth());
         setExpenseYear(d.getFullYear());
@@ -489,14 +513,14 @@ const App: React.FC = () => {
   const handleDeleteExpense = (id: string) => {
     if (window.confirm("Excluir esta despesa?")) {
       google.script.run.withSuccessHandler(() => {
-        setExpenses(prev => prev.filter(e => e.id !== id));
+        setExpenses(prev => (prev || []).filter(e => e.id !== id));
       }).deleteExpense(id);
     }
   };
 
   // --- LOGICA DE FILTROS AGENDAMENTOS ---
   const filteredAppointments = useMemo(() => {
-    let base = appointments;
+    let base = appointments || [];
     if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
     if (searchQuery.trim().length > 0) {
       const q = searchQuery.toLowerCase().trim();
@@ -508,14 +532,14 @@ const App: React.FC = () => {
 
   const currentPartnerCommission = useMemo(() => {
     if (auth.role === 'partner' && auth.username) {
-      const p = partners.find(p => p.name === auth.username);
+      const p = (partners || []).find(p => p.name === auth.username);
       return p?.commission || 50;
     }
     return 100;
   }, [auth, partners]);
 
   const quickSummary = useMemo(() => {
-    let base = appointments;
+    let base = appointments || [];
     if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
     const filtered = base.filter(app => {
       const d = new Date(app.date + 'T12:00:00');
@@ -537,7 +561,7 @@ const App: React.FC = () => {
   };
 
   const filteredAppsForSummary = useMemo(() => {
-    let base = appointments;
+    let base = appointments || [];
     if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
     return base.filter(app => {
       const d = new Date(app.date + 'T12:00:00');
@@ -554,7 +578,7 @@ const App: React.FC = () => {
 
   const chartDataMonthly = useMemo<number[]>(() => {
     const weeks = [0, 0, 0, 0, 0];
-    const base = auth.role === 'partner' ? appointments.filter(a => a.partnerName === auth.username) : appointments;
+    const base = auth.role === 'partner' ? (appointments || []).filter(a => a.partnerName === auth.username) : (appointments || []);
     base.forEach(app => {
       const d = new Date(app.date + 'T12:00:00');
       if (d.getMonth() === financeMonth && d.getFullYear() === financeYear) {
@@ -567,7 +591,7 @@ const App: React.FC = () => {
 
   const chartDataWeekly = useMemo<number[]>(() => {
     const days = [0, 0, 0, 0, 0, 0, 0];
-    const base = auth.role === 'partner' ? appointments.filter(a => a.partnerName === auth.username) : appointments;
+    const base = auth.role === 'partner' ? (appointments || []).filter(a => a.partnerName === auth.username) : (appointments || []);
     base.forEach(app => {
       const d = new Date(app.date + 'T12:00:00');
       if (d.getMonth() === financeMonth && d.getFullYear() === financeYear) {
@@ -581,7 +605,7 @@ const App: React.FC = () => {
   }, [appointments, financeMonth, financeYear, financeWeek, financeDay, currentPartnerCommission, auth]);
 
   const yearlySummary = useMemo(() => {
-    const base = auth.role === 'partner' ? appointments.filter(a => a.partnerName === auth.username) : appointments;
+    const base = auth.role === 'partner' ? (appointments || []).filter(a => a.partnerName === auth.username) : (appointments || []);
     const total = calculateTotal(base.filter(app => new Date(app.date + 'T12:00:00').getFullYear() === financeYear), currentPartnerCommission);
     const percentage = Math.min(100, (total / annualLimit) * 100);
     return { total, limit: annualLimit, percentage, remaining: Math.max(0, annualLimit - total), isNearLimit: total > annualLimit * 0.85 };
@@ -590,11 +614,11 @@ const App: React.FC = () => {
   const handleSaveAppointment = (appData: Omit<Appointment, 'id' | 'createdAt'>) => {
     const tempId = editingAppointment?.id;
     google.script.run.withSuccessHandler((savedApp: Appointment) => {
-      if (tempId) setAppointments(prev => prev.map(a => a.id === tempId ? savedApp : a));
+      if (tempId) setAppointments(prev => (prev || []).map(a => a.id === tempId ? savedApp : a));
       else {
-        setAppointments(prev => [...prev, savedApp]);
-        if (!clients.find(c => c.name.toLowerCase() === savedApp.clientName.toLowerCase())) {
-          setClients(prev => [...prev, { name: savedApp.clientName, whatsapp: savedApp.whatsapp, lastVisitDate: savedApp.date }]);
+        setAppointments(prev => [...(prev || []), savedApp]);
+        if (!(clients || []).find(c => c.name.toLowerCase() === savedApp.clientName.toLowerCase())) {
+          setClients(prev => [...(prev || []), { name: savedApp.clientName, whatsapp: savedApp.whatsapp, lastVisitDate: savedApp.date }]);
         }
       }
       setIsManualShare(false);
@@ -609,7 +633,7 @@ const App: React.FC = () => {
   const handleDeleteAppointment = () => {
     if (!appointmentToDelete) return;
     google.script.run.withSuccessHandler(() => {
-      setAppointments(prev => prev.filter(a => String(a.id) !== String(appointmentToDelete)));
+      setAppointments(prev => (prev || []).filter(a => String(a.id) !== String(appointmentToDelete)));
       setIsFormOpen(false);
       setEditingAppointment(null);
       setAppointmentToDelete(null);
@@ -617,7 +641,14 @@ const App: React.FC = () => {
   };
 
   const groupedHistory = useMemo<Record<string, Appointment[]>>(() => {
-    let base = appointments.slice().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    let base = (appointments || []).slice().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    
+    // Filtro por Mês e Ano
+    base = base.filter(app => {
+      const d = new Date(app.date + 'T12:00:00');
+      return d.getMonth() === historyMonth && d.getFullYear() === historyYear;
+    });
+
     if (historyPartnerFilter !== 'all') base = base.filter(app => app.partnerName === historyPartnerFilter);
     if (historySearchQuery.trim()) {
       const q = historySearchQuery.toLowerCase().trim();
@@ -631,14 +662,19 @@ const App: React.FC = () => {
     const sortedGroups: Record<string, Appointment[]> = {};
     Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(key => { sortedGroups[key] = groups[key]; });
     return sortedGroups;
-  }, [appointments, historyPartnerFilter, historySearchQuery]);
+  }, [appointments, historyPartnerFilter, historySearchQuery, historyMonth, historyYear]);
 
-  const persistSettings = (opts: { updatedProcedures?: string[], updatedSecProcedures?: string[], updatedAnnualLimit?: number, updatedPartners?: Partner[] } = {}) => {
-    const { updatedProcedures, updatedSecProcedures, updatedAnnualLimit, updatedPartners } = opts;
+  const historyMonthlyTotalCount = useMemo(() => {
+    return Object.values(groupedHistory).reduce((sum, apps) => sum + apps.length, 0);
+  }, [groupedHistory]);
+
+  const persistSettings = (opts: { updatedProcedures?: string[], updatedSecProcedures?: string[], updatedAnnualLimit?: number, updatedPartners?: Partner[], updatedTimes?: string[], updatedFreeTimes?: string[] } = {}) => {
+    const { updatedProcedures, updatedSecProcedures, updatedAnnualLimit, updatedPartners, updatedTimes, updatedFreeTimes } = opts;
     const settings = { 
       studioName, studioSubtitle, studioIcon, themeId: currentTheme.id, themeMode, customColor,
       annualLimit: updatedAnnualLimit !== undefined ? updatedAnnualLimit.toString() : annualLimit.toString(),
-      userTimes: (userTimes || []).join(','),
+      userTimes: updatedTimes ? updatedTimes.join(',') : (userTimes || []).join(','),
+      freeTimes: updatedFreeTimes ? updatedFreeTimes.join(',') : (userFreeTimes || []).join(','),
       procedures: updatedProcedures ? updatedProcedures.join(',') : (procedures || []).join(','),
       secondaryProcedures: updatedSecProcedures ? updatedSecProcedures.join(',') : (secondaryProcedures || []).join(','),
       partners: JSON.stringify(updatedPartners || partners),
@@ -659,8 +695,8 @@ const App: React.FC = () => {
     const newData = { name: editClientName.trim(), whatsapp: editClientPhone.trim() };
     if (!newData.name) return;
     google.script.run.withSuccessHandler(() => {
-      setClients(prev => prev.map(c => c.name === oldName ? { ...c, ...newData } : c));
-      setAppointments(prev => prev.map(app => app.clientName === oldName ? { ...app, clientName: newData.name, whatsapp: newData.whatsapp } : app));
+      setClients(prev => (prev || []).map(c => c.name === oldName ? { ...c, ...newData } : c));
+      setAppointments(prev => (prev || []).map(app => app.clientName === oldName ? { ...app, clientName: newData.name, whatsapp: newData.whatsapp } : app));
       setEditingClientName(null);
     }).updateClient(oldName, newData);
   };
@@ -668,42 +704,76 @@ const App: React.FC = () => {
   const handleDeleteClient = (name: string) => {
     if (window.confirm(`Excluir o contato de ${name}?`)) {
       google.script.run.withSuccessHandler(() => {
-        setClients(prev => prev.filter(c => c.name.trim().toLowerCase() !== name.trim().toLowerCase()));
+        setClients(prev => (prev || []).filter(c => c.name.trim().toLowerCase() !== name.trim().toLowerCase()));
       }).deleteClient(name);
     }
   };
 
   const handleAddProcedure = () => {
-    if (newProcName.trim() && !procedures.includes(newProcName.trim())) {
-      const updated = [...procedures, newProcName.trim()]; setProcedures(updated); setNewProcName(''); persistSettings({ updatedProcedures: updated });
+    if (newProcName.trim() && !(procedures || []).includes(newProcName.trim())) {
+      const updated = [...(procedures || []), newProcName.trim()]; setProcedures(updated); setNewProcName(''); persistSettings({ updatedProcedures: updated });
     }
   };
 
   const handleAddSecondaryProcedure = () => {
-    if (newSecProcName.trim() && !secondaryProcedures.includes(newSecProcName.trim())) {
-      const updated = [...secondaryProcedures, newSecProcName.trim()]; setSecondaryProcedures(updated); setNewSecProcName(''); persistSettings({ updatedSecProcedures: updated });
+    if (newSecProcName.trim() && !(secondaryProcedures || []).includes(newSecProcName.trim())) {
+      const updated = [...(secondaryProcedures || []), newSecProcName.trim()]; setSecondaryProcedures(updated); setNewSecProcName(''); persistSettings({ updatedSecProcedures: updated });
     }
   };
 
-  const handleRemoveProcedure = (name: string) => { const u = procedures.filter(p => p !== name); setProcedures(u); persistSettings({ updatedProcedures: u }); };
-  const handleRemoveSecondaryProcedure = (name: string) => { const u = secondaryProcedures.filter(p => p !== name); setSecondaryProcedures(u); persistSettings({ updatedSecProcedures: u }); };
+  const handleAddUserTime = () => {
+    if (newTimeValue.trim() && !(userTimes || []).includes(newTimeValue.trim())) {
+      const updated = [...(userTimes || []), newTimeValue.trim()].sort(); setUserTimes(updated); setNewTimeValue(''); persistSettings({ updatedTimes: updated });
+    }
+  };
+
+  const handleAddUserFreeTime = () => {
+    if (newFreeTimeValue.trim() && !(userFreeTimes || []).includes(newFreeTimeValue.trim())) {
+      const updated = [...(userFreeTimes || []), newFreeTimeValue.trim()].sort(); setUserFreeTimes(updated); setNewFreeTimeValue(''); persistSettings({ updatedFreeTimes: updated });
+    }
+  };
+
+  const handleUpdateUserTime = (index: number) => {
+    if (!editTimeNewValue.trim()) return;
+    const updated = [...(userTimes || [])];
+    updated[index] = editTimeNewValue.trim();
+    updated.sort();
+    setUserTimes(updated);
+    setEditingTimeIndex(null);
+    persistSettings({ updatedTimes: updated });
+  };
+
+  const handleUpdateUserFreeTime = (index: number) => {
+    if (!editFreeTimeNewValue.trim()) return;
+    const updated = [...(userFreeTimes || [])];
+    updated[index] = editFreeTimeNewValue.trim();
+    updated.sort();
+    setUserFreeTimes(updated);
+    setEditingFreeTimeIndex(null);
+    persistSettings({ updatedFreeTimes: updated });
+  };
+
+  const handleRemoveProcedure = (name: string) => { const u = (procedures || []).filter(p => p !== name); setProcedures(u); persistSettings({ updatedProcedures: u }); };
+  const handleRemoveSecondaryProcedure = (name: string) => { const u = (secondaryProcedures || []).filter(p => p !== name); setSecondaryProcedures(u); persistSettings({ updatedSecProcedures: u }); };
+  const handleRemoveUserTime = (time: string) => { const u = (userTimes || []).filter(t => t !== time); setUserTimes(u); persistSettings({ updatedTimes: u }); };
+  const handleRemoveUserFreeTime = (time: string) => { const u = (userFreeTimes || []).filter(t => t !== time); setUserFreeTimes(u); persistSettings({ updatedFreeTimes: u }); };
 
   const handleAddPartner = () => {
     if (!newPartnerName.trim()) return;
-    const updated = [...partners, { name: newPartnerName.trim(), password: newPartnerPass, login: normalizeForLogin(newPartnerName), commission: newPartnerCommission }];
+    const updated = [...(partners || []), { name: newPartnerName.trim(), password: newPartnerPass, login: normalizeForLogin(newPartnerName), commission: newPartnerCommission }];
     setPartners(updated); setNewPartnerName(''); setNewPartnerPass(''); setNewPartnerCommission(50); persistSettings({ updatedPartners: updated });
   };
 
   const handleUpdatePartner = (index: number) => {
     const oldName = partners[index].name, newName = editPartnerName.trim(); if (!newName) return;
-    const updated = partners.map((p, i) => i === index ? { ...p, name: newName, password: editPartnerPass, login: normalizeForLogin(newName), commission: editPartnerCommission } : p);
-    if (oldName !== newName) setAppointments(appointments.map(app => app.partnerName === oldName ? { ...app, partnerName: newName } : app));
+    const updated = (partners || []).map((p, i) => i === index ? { ...p, name: newName, password: editPartnerPass, login: normalizeForLogin(newName), commission: editPartnerCommission } : p);
+    if (oldName !== newName) setAppointments((appointments || []).map(app => app.partnerName === oldName ? { ...app, partnerName: newName } : app));
     setPartners(updated); setEditingPartnerIndex(null); persistSettings({ updatedPartners: updated });
   };
 
   const handleDeletePartner = (index: number) => {
     if (window.confirm(`Excluir a parceira ${partners[index].name}?`)) {
-      const updated = partners.filter((_, i) => i !== index); setPartners(updated); persistSettings({ updatedPartners: updated });
+      const updated = (partners || []).filter((_, i) => i !== index); setPartners(updated); persistSettings({ updatedPartners: updated });
     }
   };
 
@@ -715,7 +785,7 @@ const App: React.FC = () => {
       if (typeof result !== 'string') return;
       const vCards: string[] = result.split(/END:VCARD/i);
       const newClients: Client[] = [];
-      const exPh = new Set((clients as Client[]).map((c: Client) => (c.whatsapp || '').replace(/\D/g, '')));
+      const exPh = new Set((clients || []).map((c: Client) => (c.whatsapp || '').replace(/\D/g, '')));
       vCards.forEach((vCard: string) => {
         let name = '', phone = '';
         vCard.split('\n').forEach((line: string) => {
@@ -728,7 +798,8 @@ const App: React.FC = () => {
         });
         if (name && phone && !exPh.has(phone)) { newClients.push({ name: name.trim(), whatsapp: phone, lastVisitDate: '' }); exPh.add(phone); }
       });
-      if (newClients.length > 0) google.script.run.withSuccessHandler(() => { setClients(prev => [...prev, ...newClients]); alert(`${newClients.length} contatos importados!`); }).bulkSaveClients(newClients);
+      // Fix for Error: Property 'length' does not exist on type 'unknown'. Added explicit cast to (newClients as Client[]).
+      if ((newClients as Client[]).length > 0) google.script.run.withSuccessHandler(() => { setClients(prev => [...(prev || []), ...newClients]); alert(`${(newClients as Client[]).length} contatos importados!`); }).bulkSaveClients(newClients);
     };
     reader.readAsText(file); event.target.value = '';
   };
@@ -737,7 +808,7 @@ const App: React.FC = () => {
     try {
       const [year, month, day] = dateStr.split('-');
       const date = new Date(dateStr + 'T12:00:00');
-      const dayOfWeek = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'][date.getDay()];
+      const dayOfWeek = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][date.getDay()];
       return `${day}/${month}/${year} - ${dayOfWeek}`;
     } catch (e) {
       return dateStr;
@@ -805,7 +876,9 @@ const App: React.FC = () => {
               <p className="text-[10px] font-medium uppercase tracking-[0.4em] text-slate-400 mt-2 truncate">{studioSubtitle}</p>
             </div>
           </div>
-          <button onClick={() => setIsMenuOpen(true)} className="p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm hover:scale-105 transition-all"><Menu size={26} className="text-slate-500" /></button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setIsMenuOpen(true)} className="p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm hover:scale-105 transition-all"><Menu size={26} className="text-slate-500" /></button>
+          </div>
         </div>
       </header>
 
@@ -816,7 +889,7 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-black gold-text-gradient uppercase tracking-tight">{auth.username}</h2>
           </div>
           <div className="w-full max-w-lg mx-auto flex items-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-[1.25rem] border border-slate-200/60 dark:border-slate-800/60 shadow-lg overflow-hidden flex-nowrap">
-            <div className="flex items-center gap-1 p-1.5 bg-slate-50 dark:bg-slate-800/40 border-r dark:border-slate-800 shrink-0">
+            <div className="flex items-center gap-1.5 p-1.5 bg-slate-50 dark:bg-slate-800/40 border-r dark:border-slate-800 shrink-0">
               <div className="relative">
                 <select value={quickReportMonth} onChange={(e) => setQuickReportMonth(parseInt(e.target.value))} className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[45px]">
                   {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -860,20 +933,20 @@ const App: React.FC = () => {
             </div>
             <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-3 rounded-2xl border dark:border-slate-800 text-center">
                <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-[0.2em]">Total Dia</span>
-               <span className="text-2xl font-bold text-[var(--primary-color)]">{filteredAppointments.length}</span>
+               <span className="text-2xl font-bold text-[var(--primary-color)]">{(filteredAppointments || []).length}</span>
             </div>
           </section>
         )}
 
         <div className="space-y-4">
-          {filteredAppointments.length > 0 ? filteredAppointments.map(app => (
+          {(filteredAppointments || []).length > 0 ? (filteredAppointments || []).map(app => (
             <AgendaItem 
               key={app.id} appointment={app} 
               onDelete={() => auth.role === 'master' && confirmDeleteAppointment(app.id)} 
               onEdit={() => auth.role === 'master' && (setEditingAppointment(app), setIsFormOpen(true))} 
               onShare={() => { setIsManualShare(true); setSharingAppointment(app); }} 
               isEmployeeView={auth.role === 'partner'}
-              commissionPercentage={auth.role === 'partner' ? currentPartnerCommission : (partners.find(p => p.name === app.partnerName)?.commission || 100)}
+              commissionPercentage={auth.role === 'partner' ? currentPartnerCommission : ((partners || []).find(p => p.name === app.partnerName)?.commission || 100)}
               daysSinceLastVisit={null}
             />
           )) : <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-16 text-center text-slate-300 border border-dashed border-slate-200 font-bold uppercase text-xs tracking-widest">Nenhum registro para esta data.</div>}
@@ -889,16 +962,17 @@ const App: React.FC = () => {
                <h2 className="text-2xl font-black dark:text-white uppercase tracking-[0.2em]">MENU</h2>
                <button onClick={() => setIsMenuOpen(false)} className="p-2 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-400"><X size={24} /></button>
             </div>
-            <nav className="space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+            <nav className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
               {auth.role === 'master' ? (
                 <>
                   {[
                     { label: 'Clientes', icon: <Users size={18} />, action: () => setIsClientsOpen(true) },
-                    { label: 'Parceiras', icon: <HardHat size={18} />, action: () => setIsPartnersOpen(true) },
                     { label: 'Histórico', icon: <HistoryIcon size={18} />, action: () => setIsHistoryOpen(true) },
                     { label: 'Procedimentos', icon: <Sparkle size={18} />, action: () => setIsProceduresOpen(true) },
+                    { label: 'Horários', icon: <Clock size={18} />, action: () => setIsTimesOpen(true) },
                     { label: 'Despesas', icon: <ShoppingBag size={18} />, action: () => setIsExpensesOpen(true) },
                     { label: 'Financeiro', icon: <Briefcase size={18} />, action: () => setIsFinanceOpen(true) },
+                    { label: 'Parceiras', icon: <HardHat size={18} />, action: () => setIsPartnersOpen(true) },
                     { label: 'Ajustes', icon: <Settings size={18} />, action: () => setIsSettingsOpen(true) }
                   ].map((item, idx) => (
                     <button key={idx} onClick={() => { item.action(); setIsMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-slate-600 hover:border-[var(--primary-color)] transition-all">
@@ -927,14 +1001,14 @@ const App: React.FC = () => {
 
       {/* MODAL DESPESAS */}
       {isExpensesOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-6 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-6 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
             <div className="flex justify-between items-center shrink-0">
                <div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Despesas</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Gestão de Custos</p></div>
                <button onClick={() => setIsExpensesOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
             </div>
             <div className="grid grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-800/40 p-2 rounded-2xl">
-              {[{l: 'Dia', v: expenseDay, s: setExpenseDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: expenseWeek, s: setExpenseWeek, d: WEEKS}, {l: 'Mês', v: expenseMonth, s: setExpenseMonth, d: MONTHS}, {l: 'Ano', v: expenseYear, s: setExpenseYear, d: EXPENSE_YEARS}].map((f, i) => (
+              {[{l: 'Dia', v: expenseDay, s: setExpenseDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: expenseWeek, s: setExpenseWeek, d: WEEKS}, {l: 'Mês', v: expenseMonth, s: setExpenseMonth, d: MONTHS}, {l: 'Ano', v: expenseYear, s: setExpenseYear, d: YEARS}].map((f, i) => (
                 <div key={i} className="space-y-1">
                   <div className="relative">
                     <select value={f.v} onChange={(e) => f.s(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-800 border-none rounded-xl p-2.5 text-[9px] font-bold outline-none appearance-none focus:ring-1 ring-[var(--primary-color)] shadow-sm">
@@ -968,11 +1042,11 @@ const App: React.FC = () => {
             </div>
             <div className="space-y-3">
                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Registros (Filtro Ativo)</h4>
-               <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                  {filteredExpenses.length > 0 ? filteredExpenses.map(exp => (
+               <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                  {(filteredExpenses || []).length > 0 ? (filteredExpenses || []).map(exp => (
                     <div key={exp.id} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800/30 rounded-2xl border border-slate-100 dark:border-slate-800 group transition-all">
                        <div className="flex flex-col"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{exp.name}</span><div className="flex items-center gap-2"><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{exp.date.split('-').reverse().join('/')}</span><span className="text-[8px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 font-black uppercase tracking-tighter">{exp.paymentMethod || 'Pix'}</span></div></div>
-                       <div className="flex items-center gap-4"><span className="text-sm font-black text-red-500">R$ {exp.value.toFixed(2)}</span><button onClick={() => handleDeleteExpense(exp.id)} className="p-2 text-slate-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button></div>
+                       <div className="flex items-center gap-4"><span className="text-sm font-black text-red-500">R$ {exp.value.toFixed(2)}</span><button onClick={() => handleDeleteExpense(exp.id)} className="p-2 text-slate-300 hover:text-red-500 transition-all"><Trash2 size={16} /></button></div>
                     </div>
                   )) : (<div className="text-center py-8 text-slate-300 font-bold uppercase text-[10px] tracking-widest border border-dashed border-slate-200 rounded-2xl">Nenhuma despesa no filtro selecionado</div>)}
                </div>
@@ -983,8 +1057,8 @@ const App: React.FC = () => {
 
       {/* FINANCEIRO MODAL */}
       {isFinanceOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
             <div className="flex justify-between items-center shrink-0">
                <div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Financeiro</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{auth.role === 'master' ? 'Relatório Geral' : `Relatório de ${auth.username}`}</p></div>
                <button onClick={() => setIsFinanceOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
@@ -1045,19 +1119,34 @@ const App: React.FC = () => {
       )}
 
       {isClientsOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Meus Contatos</h2><div className="flex gap-2"><button onClick={() => fileInputRef.current?.click()} className="p-3 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 rounded-2xl hover:bg-indigo-100 transition-all"><Upload size={20} /></button><button onClick={() => setIsClientsOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button></div><input type="file" ref={fileInputRef} onChange={handleImportVCF} accept=".vcf" className="hidden" /></div>
-            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Procurar cliente..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)]" /></div>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Meus Contatos</h2>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 rounded-2xl hover:bg-indigo-100 transition-all"><Upload size={20} /></button>
+                <button onClick={() => setIsClientsOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button>
+              </div>
+              <input type="file" ref={fileInputRef} onChange={handleImportVCF} accept=".vcf" className="hidden" />
+            </div>
             <div className="space-y-4">
-              {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.whatsapp.includes(clientSearch)).map((c, i) => (
+              <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Procurar cliente..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)]" /></div>
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Quantidade de Contatos:</span>
+                <span className="text-sm font-black text-[var(--primary-color)]">{(clients || []).length}</span>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {(clients || []).filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.whatsapp.includes(clientSearch)).map((c, i) => (
                 <div key={i} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
                   {editingClientName === c.name ? (
                     <div className="flex-1 flex gap-2"><input value={editClientName} onChange={e => setEditClientName(e.target.value)} className="flex-1 bg-white dark:bg-slate-900 p-3 rounded-xl text-xs font-bold" /><input value={editClientPhone} onChange={e => setEditClientPhone(e.target.value)} className="w-32 bg-white dark:bg-slate-900 p-3 rounded-xl text-xs font-bold" /><button onClick={() => handleUpdateClient(c.name)} className="p-3 bg-emerald-500 text-white rounded-xl"><CheckCircle2 size={16} /></button></div>
                   ) : (
                     <>
                       <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl gold-gradient flex items-center justify-center text-white font-black">{c.name.charAt(0)}</div><div><p className="text-sm font-bold text-slate-700 dark:text-slate-200">{c.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.whatsapp}</p></div></div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex gap-1 transition-all">
                         <button onClick={() => { setEditingClientName(c.name); setEditClientName(c.name); setEditClientPhone(c.whatsapp); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button>
                         <button onClick={() => handleDeleteClient(c.name)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
                       </div>
@@ -1070,11 +1159,227 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {isFormOpen && <AppointmentForm onClose={() => { setIsFormOpen(false); setEditingAppointment(null); }} onSubmit={handleSaveAppointment} onDelete={confirmDeleteAppointment} initialDate={selectedDate} availableProcedures={procedures} availableSecondaryProcedures={secondaryProcedures} editingData={editingAppointment} clients={clients} userTimes={userTimes} onUpdateUserTimes={setUserTimes} allAppointments={appointments} availablePartners={partners} />}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-6 sm:p-8 flex flex-col animate-in zoom-in-95 duration-300 max-h-[90vh]">
+             <div className="flex justify-between items-center mb-6 shrink-0"><div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Histórico Geral</h2><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Busca e registros passados</p></div><button onClick={() => setIsHistoryOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button></div>
+             
+             <div className="space-y-4 mb-6 shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" value={historySearchQuery} onChange={(e) => setHistorySearchQuery(e.target.value)} placeholder="Procurar no histórico..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] shadow-inner" />
+                </div>
+                
+                {/* Filtros Ajustados: Todas as profissionais, Mês, Ano na mesma linha sem rolagem */}
+                <div className="flex items-center gap-1.5 w-full">
+                  <div className="relative flex-[2]">
+                    <select value={historyPartnerFilter} onChange={(e) => setHistoryPartnerFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-200 dark:border-slate-700 appearance-none pr-6 truncate">
+                      <option value="all">Equipe</option>
+                      <option value="Daniele Dias">Daniele Dias</option>
+                      {(partners || []).map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={10} />
+                  </div>
+                  <div className="relative flex-1">
+                    <select value={historyMonth} onChange={(e) => setHistoryMonth(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-200 dark:border-slate-700 appearance-none pr-6">
+                      {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={10} />
+                  </div>
+                  <div className="relative flex-1">
+                    <select value={historyYear} onChange={(e) => setHistoryYear(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-200 dark:border-slate-700 appearance-none pr-6">
+                      {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={10} />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <Users size={16} className="text-[var(--primary-color)]" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Total de agendamentos</span>
+                  </div>
+                  <span className="text-lg font-black text-[var(--primary-color)]">{historyMonthlyTotalCount}</span>
+                </div>
+             </div>
+
+             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-10">
+                {Object.keys(groupedHistory || {}).length > 0 ? Object.entries(groupedHistory).map(([date, apps]) => (
+                  <div key={date} className="space-y-4">
+                    <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-3 px-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CalendarDays size={14} className="text-[var(--primary-color)] shrink-0" />
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-600 dark:text-slate-200 truncate">
+                          {formatHistoryDate(date)}
+                        </h3>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700 whitespace-nowrap ml-2">
+                        {/* Fix for Error: Property 'length' does not exist on type 'unknown'. Added explicit cast to (apps as Appointment[]). */}
+                        {(apps as Appointment[]).length} {(apps as Appointment[]).length === 1 ? 'Registro' : 'Registros'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Fix for Error: Property 'map' does not exist on type 'unknown'. Added explicit cast to (apps as Appointment[]). */}
+                      {(apps as Appointment[]).map(app => (
+                        <AgendaItem 
+                          key={app.id} 
+                          appointment={app} 
+                          isHistory 
+                          onDelete={() => confirmDeleteAppointment(app.id)} 
+                          onEdit={() => { setEditingAppointment(app); setIsFormOpen(true); setIsHistoryOpen(false); }} 
+                          daysSinceLastVisit={null}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )) : (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-300 opacity-50 space-y-4">
+                    <HistoryIcon size={48} />
+                    <p className="font-bold uppercase tracking-widest text-xs">Nenhum registro encontrado</p>
+                  </div>
+                )}
+             </div>
+          </div>
+        </div>
+      )}
+
+      {isProceduresOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300 pr-2">
+             <div className="flex justify-between items-center"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Procedimentos</h2><button onClick={() => setIsProceduresOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button></div>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Principais</p>
+                   <div className="flex gap-2"><input value={newProcName} onChange={e => setNewProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" /><button onClick={handleAddProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
+                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">{(procedures || []).map(p => (<div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group"><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span><button onClick={() => handleRemoveProcedure(p)} className="transition-all text-slate-400 hover:text-red-500"><Trash2 size={14} /></button></div>))}</div>
+                </div>
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Secundários</p>
+                   <div className="flex gap-2"><input value={newSecProcName} onChange={e => setNewSecProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" /><button onClick={handleAddSecondaryProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
+                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">{(secondaryProcedures || []).map(p => (<div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group"><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span><button onClick={() => handleRemoveSecondaryProcedure(p)} className="transition-all text-slate-400 hover:text-red-500"><Trash2 size={14} /></button></div>))}</div>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {isTimesOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
+             <div className="flex justify-between items-center shrink-0">
+               <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Gestão de Horários</h2>
+               <button onClick={() => setIsTimesOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
+             </div>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Horários Padrão</p>
+                   <div className="flex gap-2"><input type="time" value={newTimeValue} onChange={e => setNewTimeValue(e.target.value)} className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs font-bold" /><button onClick={handleAddUserTime} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
+                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">{(userTimes || []).map((t, idx) => (
+                     <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group">
+                       {editingTimeIndex === idx ? (
+                         <div className="flex gap-1 w-full">
+                           <input type="time" value={editTimeNewValue} onChange={e => setEditTimeNewValue(e.target.value)} className="flex-1 bg-white dark:bg-slate-900 p-1.5 rounded-lg text-xs font-bold" />
+                           <button onClick={() => handleUpdateUserTime(idx)} className="p-2 bg-emerald-500 text-white rounded-lg"><CheckCircle2 size={12} /></button>
+                         </div>
+                       ) : (
+                         <>
+                           <div className="flex items-center gap-3"><Clock size={14} className="text-[var(--primary-color)]" /><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{t}</span></div>
+                           <div className="flex gap-1">
+                             <button onClick={() => { setEditingTimeIndex(idx); setEditTimeNewValue(t); }} className="p-1.5 text-slate-400 hover:text-[var(--primary-color)] transition-all"><Edit2 size={14} /></button>
+                             <button onClick={() => handleRemoveUserTime(t)} className="p-1.5 text-slate-400 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   ))}</div>
+                </div>
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Horários Livres</p>
+                   <div className="flex gap-2"><input type="time" value={newFreeTimeValue} onChange={e => setNewFreeTimeValue(e.target.value)} className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs font-bold" /><button onClick={handleAddUserFreeTime} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
+                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">{(userFreeTimes || []).map((t, idx) => (
+                     <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group">
+                       {editingFreeTimeIndex === idx ? (
+                         <div className="flex gap-1 w-full">
+                           <input type="time" value={editFreeTimeNewValue} onChange={e => setEditFreeTimeNewValue(e.target.value)} className="flex-1 bg-white dark:bg-slate-900 p-1.5 rounded-lg text-xs font-bold" />
+                           <button onClick={() => handleUpdateUserFreeTime(idx)} className="p-2 bg-emerald-500 text-white rounded-lg"><CheckCircle2 size={12} /></button>
+                         </div>
+                       ) : (
+                         <>
+                           <div className="flex items-center gap-3"><Clock size={14} className="text-emerald-500" /><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{t}</span></div>
+                           <div className="flex gap-1">
+                             <button onClick={() => { setEditingFreeTimeIndex(idx); setEditFreeTimeNewValue(t); }} className="p-1.5 text-slate-400 hover:text-[var(--primary-color)] transition-all"><Edit2 size={14} /></button>
+                             <button onClick={() => handleRemoveUserFreeTime(t)} className="p-1.5 text-slate-400 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   ))}</div>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {isPartnersOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
+             <div className="flex justify-between items-center shrink-0"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Equipe</h2><button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button></div>
+             <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Profissional</p>
+                <div className="grid grid-cols-2 gap-3">
+                   <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Nome" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
+                   <input value={newPartnerPass} onChange={e => setNewPartnerPass(e.target.value)} placeholder="Senha" type="text" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
+                   <div className="col-span-2 flex flex-col bg-white dark:bg-slate-900 p-5 rounded-2xl">
+                      <div className="flex flex-col"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissão Porcentagem</span><p className="text-[8px] text-slate-400 uppercase tracking-widest mt-1.5">Escolha a porcentagem</p></div>
+                      <div className="relative mt-3"><select value={newPartnerCommission} onChange={e => setNewPartnerCommission(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-3.5 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">{Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (<option key={val} value={val}>{val}%</option>))}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div></div>
+                   </div>
+                </div>
+                <button onClick={handleAddPartner} className="w-full gold-gradient text-white py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest shadow-lg">Cadastrar Parceira</button>
+             </div>
+             <div className="space-y-4">
+                {(partners || []).map((p, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
+                    {editingPartnerIndex === i ? (
+                      <div className="w-full flex flex-col gap-3">
+                         <div className="flex flex-col sm:flex-row gap-2"><input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)] min-w-0" /><input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" type="text" placeholder="Senha" /></div>
+                         <div className="flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800"><div className="flex flex-col"><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Alterar Comissão</span></div><div className="flex items-center gap-3"><div className="relative flex-1"><select value={editPartnerCommission} onChange={e => setEditPartnerCommission(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-800 border-none rounded-xl py-3 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">{Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (<option key={val} value={val}>{val}%</option>))}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div></div><button onClick={() => handleUpdatePartner(i)} className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg active:scale-95 transition-all"><CheckCircle2 size={16} /></button></div></div>
+                      </div>
+                    ) : (
+                      <>
+                         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden"><div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center shrink-0"><HardHat size={20} /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p><div className="flex items-center gap-2"><span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 px-2 py-0.5 rounded-full shrink-0">{p.commission}%</span><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">Login: {p.login}</span></div></div></div>
+                         <div className="flex gap-1 transition-all shrink-0"><button onClick={() => { setEditingPartnerIndex(i); setEditPartnerName(p.name); setEditPartnerPass(p.password); setEditPartnerCommission(p.commission || 50); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button><button onClick={() => handleDeletePartner(i)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button></div>
+                      </>
+                    )}
+                  </div>
+                ))}
+             </div>
+          </div>
+        </div>
+      )}
+
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
+             <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 shrink-0"><div><h2 className="text-lg font-bold dark:text-white uppercase tracking-tight">Ajustes Studio</h2><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Configurações visuais</p></div><button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400"><X size={20} /></button></div>
+             <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Studio</label><input value={studioName} onChange={e => setStudioName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" /></div>
+                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Subtítulo</label><input value={studioSubtitle} onChange={e => setStudioSubtitle(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" /></div>
+                </div>
+                <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-[2rem] space-y-4 border border-amber-100 dark:border-amber-900/30"><div className="flex items-center gap-2"><ShieldCheck size={18} className="text-amber-500" /><h3 className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Acesso Master</h3></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div className="space-y-1"><label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Usuário Master</label><input type="text" value={masterUsername} onChange={e => setMasterUsername(e.target.value)} className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" /></div><div className="space-y-1"><label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Senha Master</label><div className="relative"><input type={showMasterPass ? "text" : "password"} value={masterPassword} onChange={e => setMasterPassword(e.target.value)} className="w-full bg-white dark:bg-slate-950 p-3 pr-10 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" /><button type="button" onClick={() => setShowMasterPass(!showMasterPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-500 transition-colors">{showMasterPass ? <EyeOff size={14} /> : <Eye size={14} />}</button></div></div></div></div>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800"><div className="flex items-center justify-between mb-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ícone de Marca</label><button onClick={() => setIsIconsExpanded(!isIconsExpanded)} className="text-[9px] font-bold text-[var(--primary-color)] uppercase tracking-widest flex items-center gap-1">{isIconsExpanded ? <><ChevronUp size={12} /> Menos</> : <><ChevronDown size={12} /> Todos</>}</button></div><div className="flex flex-wrap justify-center gap-2">{BRAND_ICON_OPTIONS.slice(0, isIconsExpanded ? 20 : 7).map(iconKey => (<button key={iconKey} onClick={() => setStudioIcon(iconKey)} className={`p-2 rounded-xl transition-all ${studioIcon === iconKey ? 'bg-[var(--primary-color)] text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-400 hover:scale-110'}`}>{React.cloneElement(BEAUTY_ICONS[iconKey] as React.ReactElement<any>, { size: 14 })}</button>))}</div></div>
+                <div className="space-y-3"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Estilo Visual</label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{COLOR_PALETTES.map(palette => (<button key={palette.id} onClick={() => setCurrentTheme(palette)} className={`flex items-center gap-2 p-2 rounded-xl border-2 transition-all ${currentTheme.id === palette.id ? 'border-[var(--primary-color)] bg-white dark:bg-slate-800' : 'border-transparent bg-slate-50 dark:bg-slate-900'}`}><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: palette.id === 'custom' ? customColor : palette.primary }} /><span className="text-[10px] font-bold truncate">{palette.name}</span></button>))}</div>{currentTheme.id === 'custom' && (<div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2"><div className="flex items-center gap-3"><input type="color" value={customColor} onChange={(e) => setCustomColor(e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-none p-0 bg-transparent outline-none" /><div className="flex-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">Cor Personalizada</span><div className="flex items-center gap-2"><PipetteIcon size={12} className="text-slate-400" /><span className="text-[10px] font-mono font-bold uppercase text-slate-600 dark:text-slate-300">{customColor}</span></div></div></div></div>)}</div>
+             </div>
+             <div className="p-6 border-t dark:border-slate-800 shrink-0"><button onClick={saveSettings} disabled={savingSettings} className="w-full gold-gradient text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-[0.2em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all">{savingSettings ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /><span>Salvar Alterações</span></>}</button></div>
+          </div>
+        </div>
+      )}
+
+      {isFormOpen && <AppointmentForm onClose={() => { setIsFormOpen(false); setEditingAppointment(null); }} onSubmit={handleSaveAppointment} onDelete={confirmDeleteAppointment} initialDate={selectedDate} availableProcedures={procedures} availableSecondaryProcedures={secondaryProcedures} editingData={editingAppointment} clients={clients} userTimes={userTimes} freeTimes={userFreeTimes} onUpdateUserTimes={setUserTimes} allAppointments={appointments} availablePartners={partners} />}
       {sharingAppointment && <ShareModal appointment={sharingAppointment} onClose={() => setSharingAppointment(null)} isManualShare={isManualShare} />}
       
       {appointmentToDelete && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-sm p-8 text-center space-y-6">
             <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto"><AlertTriangle size={32} /></div>
             <div><h3 className="text-xl font-bold uppercase tracking-tight">Excluir?</h3><p className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-2">Deseja mesmo remover este agendamento?</p></div>
