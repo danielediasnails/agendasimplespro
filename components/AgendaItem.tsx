@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Trash2, Edit2, Calendar, Clock, Share2, Wallet, Sparkles, Sparkle, User, DollarSign, Crown, Lock, Banknote } from 'lucide-react';
 import { Appointment } from '../types';
@@ -53,25 +54,25 @@ const AgendaItem: React.FC<AgendaItemProps> = ({
   const partnerGain = totalServiceValue * (commissionPercentage / 100);
 
   return (
-    <div className={`group bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[2rem] shadow-sm hover:shadow-md hover:border-[var(--primary-color)] transition-all duration-500 flex flex-col items-center text-center ${isHistory ? 'p-4' : 'p-6 sm:p-7'}`}>
+    <div className={`group bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[2rem] shadow-sm hover:shadow-md hover:border-[var(--primary-color)] transition-all duration-500 flex flex-col items-center text-center ${isHistory ? 'p-5' : 'p-6 sm:p-7'}`}>
       
       {/* Nome do Cliente */}
-      <h3 className={`font-bold tracking-tight gold-text-gradient uppercase leading-tight mb-2 transition-transform duration-500 group-hover:scale-[1.01] ${isHistory ? 'text-lg' : 'text-xl sm:text-2xl'}`}>
+      <h3 className={`font-bold tracking-tight gold-text-gradient uppercase leading-tight mb-2 transition-transform duration-500 group-hover:scale-[1.01] ${isHistory ? 'text-base' : 'text-xl sm:text-2xl'}`}>
         {appointment.clientName || 'Sem Nome'}
       </h3>
 
       {/* Info de Tempo e Data */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
         <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/50 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700/50">
-          <Clock size={14} className="text-[var(--primary-color)]" />
-          <span className={`font-semibold text-slate-500 dark:text-slate-400 uppercase ${isHistory ? 'text-[10px]' : 'text-xs'}`}>
+          <Clock size={12} className="text-[var(--primary-color)]" />
+          <span className={`font-semibold text-slate-500 dark:text-slate-400 uppercase ${isHistory ? 'text-[9px]' : 'text-xs'}`}>
             {formatTime(appointment.time)} {appointment.secondaryTime && `& ${formatTime(appointment.secondaryTime)}`}
           </span>
         </div>
         
         <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/50 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700/50">
-          <Calendar size={14} className="text-[var(--primary-color)]" />
-          <span className={`font-semibold text-slate-500 dark:text-slate-400 uppercase ${isHistory ? 'text-[10px]' : 'text-xs'}`}>
+          <Calendar size={12} className="text-[var(--primary-color)]" />
+          <span className={`font-semibold text-slate-500 dark:text-slate-400 uppercase ${isHistory ? 'text-[9px]' : 'text-xs'}`}>
             {formatDate(appointment.date)} ({getDayOfWeek(appointment.date)})
           </span>
         </div>
@@ -93,40 +94,40 @@ const AgendaItem: React.FC<AgendaItemProps> = ({
         </div>
       )}
 
-      {!isHistory && (
-        <>
-          {/* Procedimentos */}
-          <div className="flex flex-col items-center gap-2 mb-5">
-            <div className="flex flex-col items-center gap-1 px-4 py-2 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-slate-100/50 dark:border-slate-800/50">
-              <div className="flex items-center gap-2">
-                <Sparkles size={12} className="text-[var(--primary-color)] opacity-70" />
-                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                  {appointment.procedure}
-                </span>
-              </div>
-              {appointment.secondaryProcedure && (
-                <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-slate-700 w-full justify-center">
-                  <Sparkle size={10} className="text-emerald-500 opacity-70" />
-                  <span className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest">
-                    {appointment.secondaryProcedure}
-                  </span>
-                </div>
-              )}
-            </div>
+      {/* Procedimentos - Agora exibidos sempre, incluindo histórico */}
+      <div className="flex flex-col items-center gap-2 mb-5 w-full">
+        <div className="flex flex-col items-center gap-1 px-4 py-2 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-slate-100/50 dark:border-slate-800/50 w-full max-w-[200px]">
+          <div className="flex items-center gap-2">
+            <Sparkles size={10} className="text-[var(--primary-color)] opacity-70" />
+            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest truncate">
+              {appointment.procedure}
+            </span>
           </div>
+          {appointment.secondaryProcedure && (
+            <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-slate-700 w-full justify-center">
+              <Sparkle size={8} className="text-emerald-500 opacity-70" />
+              <span className="text-[8px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest truncate">
+                {appointment.secondaryProcedure}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
 
-          {/* Seção Financeira */}
+      {!isHistory ? (
+        <>
+          {/* Seção Financeira (Apenas Visão Atual) */}
           <div className="w-full flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 mb-5">
             {!isEmployeeView ? (
               // Visão Master: Detalhes de sinal e total
               <>
-                <div className="flex gap-6">
-                  <div className="flex flex-col items-start">
+                <div className="flex gap-6 text-left">
+                  <div className="flex flex-col">
                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Sinal</span>
                     <span className="text-sm font-bold text-slate-700 dark:text-slate-200">R$ {Number(appointment.deposit).toFixed(2)}</span>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Procedimento</span>
+                  <div className="flex flex-col">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Total</span>
                     <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">R$ {Number(appointment.totalValue).toFixed(2)}</span>
                   </div>
                 </div>
@@ -135,7 +136,7 @@ const AgendaItem: React.FC<AgendaItemProps> = ({
                 </div>
               </>
             ) : (
-              // Visão Parceira: Valor comissionado que ela recebe (Simplificado)
+              // Visão Parceira: Valor comissionado que ela recebe
               <div className="w-full flex items-center justify-center gap-4 bg-emerald-50/40 dark:bg-emerald-950/10 py-4 rounded-2xl border border-emerald-100/50 dark:border-emerald-900/20">
                 <div className="p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm text-emerald-500">
                   <Banknote size={20} />
@@ -147,18 +148,29 @@ const AgendaItem: React.FC<AgendaItemProps> = ({
             )}
           </div>
         </>
+      ) : (
+        /* Visão Histórico: Valores Simplificados */
+        <div className="w-full pt-3 border-t border-slate-100 dark:border-slate-800 mb-4 flex justify-between items-center px-2">
+            <div className="flex flex-col items-start">
+               <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">Valor Total</span>
+               <span className="text-xs font-black text-slate-600 dark:text-slate-300">R$ {(Number(appointment.totalValue) + Number(appointment.deposit)).toFixed(2)}</span>
+            </div>
+            <div className="text-[8px] font-black uppercase text-slate-400 px-2 py-0.5 bg-slate-50 dark:bg-slate-800 rounded-md">
+              {appointment.paymentMethod}
+            </div>
+        </div>
       )}
 
       {/* Dock de Ações - Oculto para parceiras */}
       {!isEmployeeView && (
-        <div className="flex items-center justify-center gap-1 p-1 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner w-fit">
+        <div className="flex items-center justify-center gap-1 p-1 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner w-fit mt-auto">
           {!isHistory && (
             <button 
               onClick={onShare} 
               className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all"
               title="Enviar Confirmação"
             >
-              <Share2 size={18} />
+              <Share2 size={16} />
             </button>
           )}
           <button 
@@ -166,14 +178,14 @@ const AgendaItem: React.FC<AgendaItemProps> = ({
             className="p-2 text-slate-400 hover:text-[var(--primary-color)] hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all"
             title="Editar"
           >
-            <Edit2 size={18} />
+            <Edit2 size={16} />
           </button>
           <button 
             onClick={onDelete} 
             className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all"
             title="Excluir"
           >
-            <Trash2 size={18} />
+            <Trash2 size={16} />
           </button>
         </div>
       )}
