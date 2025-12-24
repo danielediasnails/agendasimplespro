@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Calendar, User, Sparkles, DollarSign, Clock, CheckCircle2, Phone, Search, History, Wallet, Plus, Trash2, AlertTriangle, Sparkle, HardHat } from 'lucide-react';
 import { TimeMode, Appointment, Client, PaymentMethod, Partner } from '../types';
-import { STANDARD_TIMES, FREE_TIMES, PAYMENT_METHODS } from '../constants';
+import { PAYMENT_METHODS } from '../constants';
 
 interface AppointmentFormProps {
   onClose: () => void;
@@ -13,6 +14,7 @@ interface AppointmentFormProps {
   editingData?: Appointment | null;
   clients: Client[];
   userTimes: string[];
+  freeTimes: string[];
   onUpdateUserTimes: (newTimes: string[]) => void;
   allAppointments: Appointment[];
   availablePartners: Partner[];
@@ -28,18 +30,21 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
   editingData, 
   clients,
   userTimes,
+  freeTimes,
   onUpdateUserTimes,
   allAppointments,
   availablePartners
 }) => {
   const partnersList = useMemo(() => ['Daniele Dias', ...availablePartners.map(p => p.name)], [availablePartners]);
+  const standardTimesList = useMemo(() => userTimes && userTimes.length > 0 ? userTimes : ['08:00', '10:30', '13:30', '16:00', '18:00'], [userTimes]);
+  const freeTimesList = useMemo(() => freeTimes && freeTimes.length > 0 ? freeTimes : ['07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'], [freeTimes]);
   
   const [date, setDate] = useState(initialDate);
   const [clientName, setClientName] = useState('');
   const [whatsapp, setWhatsapp] = useState(''); 
   const [timeMode, setTimeMode] = useState<TimeMode>(TimeMode.STANDARD);
   const [timeMode2, setTimeMode2] = useState<TimeMode>(TimeMode.STANDARD);
-  const [time, setTime] = useState(STANDARD_TIMES[0]);
+  const [time, setTime] = useState(standardTimesList[0]);
   const [time2, setTime2] = useState('');
   const [procedure, setProcedure] = useState(availableProcedures[0] || '');
   const [secondaryProcedure, setSecondaryProcedure] = useState('');
@@ -60,13 +65,13 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
       setSecondaryProcedure(editingData.secondaryProcedure || '');
       setPartnerName(editingData.partnerName || partnersList[0]);
       
-      const isStandard = STANDARD_TIMES.includes(editingData.time);
+      const isStandard = standardTimesList.includes(editingData.time);
       if (isStandard) setTimeMode(TimeMode.STANDARD);
       else setTimeMode(TimeMode.FREE);
-      setTime(editingData.time || STANDARD_TIMES[0]);
+      setTime(editingData.time || standardTimesList[0]);
 
       if (editingData.secondaryTime) {
-        const isStandard2 = STANDARD_TIMES.includes(editingData.secondaryTime);
+        const isStandard2 = standardTimesList.includes(editingData.secondaryTime);
         if (isStandard2) setTimeMode2(TimeMode.STANDARD);
         else setTimeMode2(TimeMode.FREE);
         setTime2(editingData.secondaryTime);
@@ -78,7 +83,7 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
       setTotalValue(editingData.totalValue ? editingData.totalValue.toString() : '');
       setPaymentMethod(editingData.paymentMethod as PaymentMethod || 'Pix');
     }
-  }, [editingData, partnersList]);
+  }, [editingData, partnersList, standardTimesList]);
 
   useEffect(() => {
     if (clientName && clientName.length > 1 && !editingData) {
@@ -144,8 +149,8 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
     }
   };
 
-  const timesToDisplay = timeMode === TimeMode.STANDARD ? STANDARD_TIMES : FREE_TIMES;
-  const timesToDisplay2 = timeMode2 === TimeMode.STANDARD ? STANDARD_TIMES : FREE_TIMES;
+  const timesToDisplay = timeMode === TimeMode.STANDARD ? standardTimesList : freeTimesList;
+  const timesToDisplay2 = timeMode2 === TimeMode.STANDARD ? standardTimesList : freeTimesList;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
@@ -164,14 +169,14 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Data</label>
               <div className="relative">
                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all min-w-0" />
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all min-w-0" />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Profissional</label>
               <div className="relative">
                 <HardHat className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <select value={partnerName} onChange={(e) => setPartnerName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] transition-all min-w-0">
+                <select value={partnerName} onChange={(e) => setPartnerName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] transition-all min-w-0">
                   {partnersList.map(emp => <option key={emp} value={emp}>{emp}</option>)}
                 </select>
               </div>
@@ -183,7 +188,7 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Cliente</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} onFocus={() => setShowSuggestions(true)} placeholder="Nome da cliente" className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all" />
+                <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} onFocus={() => setShowSuggestions(true)} placeholder="Nome da cliente" className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all" />
               </div>
               {showSuggestions && filteredClients.length > 0 && (
                 <div className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden animate-in slide-in-from-top-2">
@@ -200,7 +205,7 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">WhatsApp</label>
               <div className="relative">
                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(00) 00000-0000" className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all" />
+                <input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(00) 00000-0000" className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all" />
               </div>
             </div>
           </div>
@@ -210,7 +215,7 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Procedimento</label>
               <div className="relative">
                 <Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <select value={procedure} onChange={(e) => setProcedure(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] transition-all">
+                <select value={procedure} onChange={(e) => setProcedure(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] transition-all">
                   {availableProcedures.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
@@ -218,13 +223,13 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
             <div className="space-y-2">
               <div className="flex justify-between items-center mb-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Horário</label>
-                <button type="button" onClick={() => setTimeMode(timeMode === TimeMode.STANDARD ? TimeMode.FREE : TimeMode.STANDARD)} className="text-[10px] font-black text-[var(--primary-color)] uppercase bg-[var(--primary-color)]/10 px-4 py-2 rounded-xl border border-[var(--primary-color)]/20 hover:bg-[var(--primary-color)] hover:text-white transition-all shadow-sm active:scale-95">
-                  Mudar p/ {timeMode === TimeMode.STANDARD ? 'Livre' : 'Padrão'}
+                <button type="button" onClick={() => setTimeMode(timeMode === TimeMode.STANDARD ? TimeMode.FREE : TimeMode.STANDARD)} className={`text-[10px] font-black uppercase px-4 py-2 rounded-xl border transition-all shadow-sm active:scale-95 ${timeMode === TimeMode.STANDARD ? 'text-[var(--primary-color)] bg-[var(--primary-color)]/10 border-[var(--primary-color)]/20' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'}`}>
+                  {timeMode === TimeMode.STANDARD ? 'Padrão' : 'Livre'}
                 </button>
               </div>
               <div className="relative">
                 <Clock className={`absolute left-4 top-1/2 -translate-y-1/2 ${hasConflictPrimary ? 'text-red-500' : 'text-slate-400'}`} size={18} />
-                <select value={time} onChange={(e) => setTime(e.target.value)} className={`w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 transition-all ${hasConflictPrimary ? 'ring-2 ring-red-500 text-red-500' : 'ring-[var(--primary-color)]'}`}>
+                <select value={time} onChange={(e) => setTime(e.target.value)} className={`w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 transition-all ${hasConflictPrimary ? 'ring-2 ring-red-500 text-red-500' : 'ring-[var(--primary-color)]'}`}>
                   {timesToDisplay.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -244,7 +249,7 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <div className="space-y-2">
                 <div className="relative">
                   <Plus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <select value={secondaryProcedure} onChange={(e) => setSecondaryProcedure(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 ring-emerald-500 transition-all">
+                  <select value={secondaryProcedure} onChange={(e) => setSecondaryProcedure(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 ring-emerald-500 transition-all">
                     <option value="">Nenhum</option>
                     {availableSecondaryProcedures.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
@@ -254,13 +259,13 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Horário</label>
-                    <button type="button" onClick={() => setTimeMode2(timeMode2 === TimeMode.STANDARD ? TimeMode.FREE : TimeMode.STANDARD)} className="text-[10px] font-black text-emerald-500 uppercase bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-95">
-                      Mudar p/ {timeMode2 === TimeMode.STANDARD ? 'Livre' : 'Padrão'}
+                    <button type="button" onClick={() => setTimeMode2(timeMode2 === TimeMode.STANDARD ? TimeMode.FREE : TimeMode.STANDARD)} className={`text-[10px] font-black uppercase px-4 py-2 rounded-xl border transition-all shadow-sm active:scale-95 ${timeMode2 === TimeMode.STANDARD ? 'text-[var(--primary-color)] bg-[var(--primary-color)]/10 border-[var(--primary-color)]/20' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'}`}>
+                      {timeMode2 === TimeMode.STANDARD ? 'Padrão' : 'Livre'}
                     </button>
                   </div>
                   <div className="relative">
                     <Clock className={`absolute left-4 top-1/2 -translate-y-1/2 ${hasConflictSecondary ? 'text-red-500' : 'text-slate-400'}`} size={18} />
-                    <select value={time2} onChange={(e) => setTime2(e.target.value)} className={`w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 transition-all ${hasConflictSecondary ? 'ring-2 ring-red-500 text-red-500' : 'ring-emerald-500'}`}>
+                    <select value={time2} onChange={(e) => setTime2(e.target.value)} className={`w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none appearance-none focus:ring-2 transition-all ${hasConflictSecondary ? 'ring-2 ring-red-500 text-red-500' : 'ring-emerald-500'}`}>
                       <option value="">Selecione...</option>
                       {timesToDisplay2.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
@@ -280,14 +285,14 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Sinal</label>
               <div className="relative">
                 <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="number" step="0.01" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="0,00" className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-amber-500 transition-all" />
+                <input type="number" step="0.01" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="0,00" className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-amber-500 transition-all" />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Procedimento</label>
               <div className="relative">
                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="number" step="0.01" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} placeholder="0,00" className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-emerald-500 transition-all" />
+                <input type="number" step="0.01" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} placeholder="0,00" className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-emerald-500 transition-all" />
               </div>
             </div>
           </div>
