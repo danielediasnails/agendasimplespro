@@ -11,10 +11,11 @@ import {
   User, UserRound, Contact, SmilePlus, Lock, KeyRound, ArrowRight, Trash2, ChevronDown, ChevronUp,
   UserSearch, Sparkle, Pipette, Upload, Save, Receipt, Wallet, CalendarRange, Target, ShieldCheck,
   TrendingDown, Calendar as LucideCalendar, Hash, LayoutGrid, Banknote, Phone, History as HistoryIcon, UserPlus, HardHat, Key,
-  AlertCircle, TrendingUp as TrendingUpIcon, Percent, AlertTriangle, Pipette as PipetteIcon
+  AlertCircle, TrendingUp as TrendingUpIcon, Percent, AlertTriangle, Pipette as PipetteIcon,
+  ShoppingBag
 } from 'lucide-react';
-import { Appointment, Client, PaymentMethod, Partner } from './types';
-import { DEFAULT_PROCEDURES, DEFAULT_SECONDARY_PROCEDURES, COLOR_PALETTES, ThemePalette, MEI_LIMIT, DEFAULT_PARTNERS } from './constants';
+import { Appointment, Client, PaymentMethod, Partner, Expense } from './types';
+import { DEFAULT_PROCEDURES, DEFAULT_SECONDARY_PROCEDURES, COLOR_PALETTES, ThemePalette, MEI_LIMIT, DEFAULT_PARTNERS, PAYMENT_METHODS } from './constants';
 import SummaryCard from './components/SummaryCard';
 import AppointmentForm from './components/AppointmentForm';
 import AgendaItem from './components/AgendaItem';
@@ -68,6 +69,7 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
       
       const appointments = data.appointments ? Object.values(data.appointments) : [];
       const clients = data.clients ? Object.values(data.clients) : [];
+      const expenses = data.expenses ? Object.values(data.expenses) : [];
       const settings = data.settings || {
         studioName: "Daniele Dias Nails",
         studioSubtitle: "Studio Nails",
@@ -86,6 +88,7 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
       result = {
         appointments,
         clients,
+        expenses,
         userEmail: 'equipe@danielediasnails.com',
         settings
       };
@@ -98,6 +101,19 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
         body: JSON.stringify(newApp)
       });
       result = newApp;
+    } else if (fnName === 'saveExpense') {
+      const exp = args[0];
+      const id = exp.id || Math.random().toString(36).substr(2, 9);
+      const newExp = { ...exp, id, createdAt: exp.createdAt || Date.now() };
+      await fetch(getUrl(`v1/expenses/${id}`), {
+        method: 'PUT',
+        body: JSON.stringify(newExp)
+      });
+      result = newExp;
+    } else if (fnName === 'deleteExpense') {
+      const id = args[0];
+      await fetch(getUrl(`v1/expenses/${id}`), { method: 'DELETE' });
+      result = true;
     } else if (fnName === 'deleteAppointment') {
       const id = args[0];
       await fetch(getUrl(`v1/appointments/${id}`), { method: 'DELETE' });
@@ -115,7 +131,7 @@ const executeFirebaseCall = async (fnName: string, args: any[], handler?: Functi
         const safeName = c.name.replace(/[.#$[\]/]/g, '_');
         updates[safeName] = c;
       });
-      await fetch(getUrl('v1/clients'), {
+      await fetch(getUrl(`v1/clients`), {
         method: 'PATCH',
         body: JSON.stringify(updates)
       });
@@ -146,7 +162,7 @@ const createFirebaseChain = (handler?: Function, failureHandler?: Function) => {
     withSuccessHandler: (h: Function) => createFirebaseChain(h, failureHandler),
     withFailureHandler: (f: Function) => createFirebaseChain(handler, f),
   };
-  const functions = ['getUserData', 'saveAppointment', 'deleteAppointment', 'updateUserSettings', 'deleteClient', 'updateClient', 'bulkSaveClients'];
+  const functions = ['getUserData', 'saveAppointment', 'deleteAppointment', 'updateUserSettings', 'deleteClient', 'updateClient', 'bulkSaveClients', 'saveExpense', 'deleteExpense'];
   functions.forEach(fn => { 
     chain[fn] = (...args: any[]) => executeFirebaseCall(fn, args, handler, failureHandler); 
   });
@@ -162,6 +178,7 @@ const WEEKS = ['Todo', 'S1', 'S2', 'S3', 'S4', 'S5'];
 const DAYS_OF_MONTH = ['Todo', ...Array.from({ length: 31 }, (_, i) => (i + 1).toString())];
 const DAYS_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const YEARS = Array.from({ length: 2100 - 2025 + 1 }, (_, i) => 2025 + i);
+const EXPENSE_YEARS = Array.from({ length: 2100 - 2026 + 1 }, (_, i) => 2026 + i);
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>(() => {
@@ -190,6 +207,7 @@ const App: React.FC = () => {
   const [userTimes, setUserTimes] = useState<string[]>([]);
   const [currentTheme, setCurrentTheme] = useState<ThemePalette>(COLOR_PALETTES[0]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   
@@ -204,6 +222,7 @@ const App: React.FC = () => {
   const [isClientsOpen, setIsClientsOpen] = useState(false);
   const [isProceduresOpen, setIsProceduresOpen] = useState(false);
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
+  const [isExpensesOpen, setIsExpensesOpen] = useState(false);
   const [isPartnersOpen, setIsPartnersOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isIconsExpanded, setIsIconsExpanded] = useState(false);
@@ -216,6 +235,21 @@ const App: React.FC = () => {
   const [financeMonth, setFinanceMonth] = useState(new Date().getMonth());
   const [financeWeek, setFinanceWeek] = useState(0); 
   const [financeDay, setFinanceDay] = useState(0); 
+  
+  const currentYear = new Date().getFullYear();
+  const [expenseYear, setExpenseYear] = useState(currentYear < 2026 ? 2026 : currentYear);
+  const [expenseMonth, setExpenseMonth] = useState(new Date().getMonth());
+  const [expenseWeek, setExpenseWeek] = useState(0);
+  const [expenseDay, setExpenseDay] = useState(0);
+  const [newExpName, setNewExpName] = useState('');
+  const [newExpValue, setNewExpValue] = useState('');
+  const [newExpPaymentMethod, setNewExpPaymentMethod] = useState<PaymentMethod>('Pix');
+  
+  const initialExpDate = currentYear < 2026 
+    ? `2026-01-01` 
+    : new Date().toISOString().split('T')[0];
+  const [newExpDate, setNewExpDate] = useState(initialExpDate);
+
   const [clientSearch, setClientSearch] = useState('');
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [editingClientName, setEditingClientName] = useState<string | null>(null);
@@ -233,7 +267,6 @@ const App: React.FC = () => {
   const [historyPartnerFilter, setHistoryPartnerFilter] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Quick Dashboard State
   const [quickReportMonth, setQuickReportMonth] = useState(new Date().getMonth());
   const [quickReportYear, setQuickReportYear] = useState(new Date().getFullYear());
   const [isQuickValuesVisible, setIsQuickValuesVisible] = useState(() => {
@@ -245,7 +278,6 @@ const App: React.FC = () => {
     localStorage.setItem('studio_values_visible', JSON.stringify(isQuickValuesVisible));
   }, [isQuickValuesVisible]);
 
-  // Carrega credenciais lembradas ao iniciar
   useEffect(() => {
     const savedCreds = localStorage.getItem('studio_remembered_creds');
     if (savedCreds) {
@@ -265,19 +297,15 @@ const App: React.FC = () => {
     let newAuth: AuthState | null = null;
     const normalizedTypedLogin = loginUser.trim().toLowerCase();
     
-    // Verifica contra Credenciais Master dinâmicas
     if (normalizedTypedLogin === masterUsername.toLowerCase() && loginPass === masterPassword) {
       newAuth = { isAuthenticated: true, role: 'master', username: 'Daniele Dias' };
     } else {
-      // Verifica contra Parceiras
       const foundPartner = partners.find(p => p.login === normalizedTypedLogin && p.password === loginPass);
       if (foundPartner) newAuth = { isAuthenticated: true, role: 'partner', username: foundPartner.name };
     }
 
     if (newAuth) {
       setAuth(newAuth);
-      
-      // Gerenciamento do Lembre-se de Mim
       if (rememberMe) {
         localStorage.setItem('studio_auth_data', JSON.stringify(newAuth));
         localStorage.setItem('studio_remembered_creds', JSON.stringify({ user: loginUser, pass: loginPass }));
@@ -295,8 +323,6 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('studio_auth_data');
     setAuth({ isAuthenticated: false, role: null, username: null });
-    
-    // Mantém os campos preenchidos se o Lembre-se de mim estiver ativo
     const savedCreds = localStorage.getItem('studio_remembered_creds');
     if (!savedCreds) {
       setLoginUser('');
@@ -368,6 +394,7 @@ const App: React.FC = () => {
           if (auth.isAuthenticated) {
             setAppointments(data.appointments || []);
             setClients(data.clients || []);
+            setExpenses(data.expenses || []);
             setUserEmail(data.userEmail);
           }
         }
@@ -395,7 +422,6 @@ const App: React.FC = () => {
     return 100;
   }, [auth, partners]);
 
-  // Mini Report Logic
   const quickSummary = useMemo(() => {
     let base = appointments;
     if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
@@ -460,11 +486,80 @@ const App: React.FC = () => {
     let base = appointments;
     if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
     return filterSummaryData(base, financeDay, financeWeek, financeMonth, financeYear);
-  }, [appointments, financeDay, financeWeek, financeMonth, financeYear, auth]);
+  }, [appointments, financeDay, financeWeek, financeMonth, financeYear]);
 
   const monthlySummary = useMemo(() => {
     return { count: filteredAppsForSummary.length, total: calculateTotal(filteredAppsForSummary, currentPartnerCommission) };
   }, [filteredAppsForSummary, currentPartnerCommission]);
+
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(exp => {
+      const d = new Date(exp.date + 'T12:00:00');
+      if (d.getFullYear() !== expenseYear || d.getMonth() !== expenseMonth) return false;
+      if (expenseDay !== 0) return d.getDate() === expenseDay;
+      if (expenseWeek !== 0) return getWeekOfMonth(d) === expenseWeek;
+      return true;
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [expenses, expenseDay, expenseWeek, expenseMonth, expenseYear]);
+
+  const monthlyExpensesTotal = useMemo(() => {
+    return expenses.filter(exp => {
+      const d = new Date(exp.date + 'T12:00:00');
+      return d.getFullYear() === expenseYear && d.getMonth() === expenseMonth;
+    }).reduce((sum, exp) => sum + Number(exp.value || 0), 0);
+  }, [expenses, expenseMonth, expenseYear]);
+
+  const chartExpensesMonthly = useMemo<number[]>(() => {
+    const weeks = [0, 0, 0, 0, 0];
+    expenses.forEach(exp => {
+      const d = new Date(exp.date + 'T12:00:00');
+      if (d.getMonth() === expenseMonth && d.getFullYear() === expenseYear) {
+        const weekIdx = getWeekOfMonth(d) - 1;
+        if (weekIdx >= 0 && weekIdx < 5) weeks[weekIdx] += Number(exp.value || 0);
+      }
+    });
+    return weeks;
+  }, [expenses, expenseMonth, expenseYear]);
+
+  const chartExpensesWeekly = useMemo<number[]>(() => {
+    const days = [0, 0, 0, 0, 0, 0, 0];
+    expenses.forEach(exp => {
+      const d = new Date(exp.date + 'T12:00:00');
+      if (d.getMonth() === expenseMonth && d.getFullYear() === expenseYear) {
+        const week = getWeekOfMonth(d);
+        if ((expenseWeek === 0 || week === expenseWeek) && (expenseDay === 0 || d.getDate() === expenseDay)) {
+          days[d.getDay()] += Number(exp.value || 0);
+        }
+      }
+    });
+    return days;
+  }, [expenses, expenseMonth, expenseYear, expenseWeek, expenseDay]);
+
+  const handleAddExpense = () => {
+    const valNum = parseFloat(newExpValue);
+    if (!newExpName.trim() || isNaN(valNum)) {
+      alert("Por favor, preencha o nome e um valor válido.");
+      return;
+    }
+    const expData = { name: newExpName.trim(), value: valNum, date: newExpDate, paymentMethod: newExpPaymentMethod };
+    google.script.run.withSuccessHandler((saved: Expense) => {
+      if (saved) {
+        setExpenses(prev => [...prev, saved]);
+        setNewExpName(''); 
+        setNewExpValue('');
+        setNewExpPaymentMethod('Pix');
+        setNewExpDate(initialExpDate);
+      }
+    }).saveExpense(expData);
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    if (window.confirm("Excluir esta despesa?")) {
+      google.script.run.withSuccessHandler(() => {
+        setExpenses(prev => prev.filter(e => e.id !== id));
+      }).deleteExpense(id);
+    }
+  };
 
   const chartDataMonthly = useMemo<number[]>(() => {
     const weeks = [0, 0, 0, 0, 0];
@@ -477,7 +572,7 @@ const App: React.FC = () => {
       }
     });
     return weeks;
-  }, [appointments, financeMonth, financeYear, auth, currentPartnerCommission]);
+  }, [appointments, financeMonth, financeYear, currentPartnerCommission, auth]);
 
   const chartDataWeekly = useMemo<number[]>(() => {
     const days = [0, 0, 0, 0, 0, 0, 0];
@@ -492,14 +587,14 @@ const App: React.FC = () => {
       }
     });
     return days;
-  }, [appointments, financeMonth, financeYear, financeWeek, financeDay, auth, currentPartnerCommission]);
+  }, [appointments, financeMonth, financeYear, financeWeek, financeDay, currentPartnerCommission, auth]);
 
   const yearlySummary = useMemo(() => {
     const base = auth.role === 'partner' ? appointments.filter(a => a.partnerName === auth.username) : appointments;
     const total = calculateTotal(base.filter(app => new Date(app.date + 'T12:00:00').getFullYear() === financeYear), currentPartnerCommission);
     const percentage = Math.min(100, (total / annualLimit) * 100);
     return { total, limit: annualLimit, percentage, remaining: Math.max(0, annualLimit - total), isNearLimit: total > annualLimit * 0.85 };
-  }, [appointments, annualLimit, financeYear, auth, currentPartnerCommission]);
+  }, [appointments, annualLimit, financeYear, currentPartnerCommission, auth]);
 
   const financeWeekLabels = useMemo(() => {
     const m = (financeMonth + 1).toString().padStart(2, '0');
@@ -562,8 +657,6 @@ const App: React.FC = () => {
 
   const persistSettings = (opts: { updatedProcedures?: string[], updatedSecProcedures?: string[], updatedAnnualLimit?: number, updatedPartners?: Partner[] } = {}) => {
     const { updatedProcedures, updatedSecProcedures, updatedAnnualLimit, updatedPartners } = opts;
-    
-    // Robustez para garantir que chamamos join() apenas em arrays
     const safeProcedures = Array.isArray(procedures) ? procedures : [];
     const safeSecProcedures = Array.isArray(secondaryProcedures) ? secondaryProcedures : [];
     const safeUserTimes = Array.isArray(userTimes) ? userTimes : [];
@@ -596,7 +689,7 @@ const App: React.FC = () => {
 
   const handleAddSecondaryProcedure = () => {
     if (newSecProcName.trim() && !secondaryProcedures.includes(newSecProcName.trim())) {
-      const updated = [...secondaryProcedures, newSecProcName.trim()]; setSecondaryProcedures(updated); setNewSecProcName(''); persistSettings({ updatedProcedures: updated });
+      const updated = [...secondaryProcedures, newSecProcName.trim()]; setSecondaryProcedures(updated); setNewSecProcName(''); persistSettings({ updatedSecProcedures: updated });
     }
   };
 
@@ -679,34 +772,15 @@ const App: React.FC = () => {
           <div className="space-y-4">
             <div className="relative">
               <UserRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="text" 
-                value={loginUser} 
-                onChange={(e) => setLoginUser(e.target.value)} 
-                placeholder="Seu usuário" 
-                className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} 
-              />
+              <input type="text" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Seu usuário" className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} />
             </div>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="password" 
-                value={loginPass} 
-                onChange={(e) => setLoginPass(e.target.value)} 
-                placeholder="Sua senha" 
-                className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} 
-              />
+              <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Sua senha" className={`w-full bg-slate-50 dark:bg-slate-800 border-2 rounded-2xl p-4 pl-12 text-sm font-bold outline-none transition-all ${loginError ? 'border-red-500' : 'focus:border-[var(--primary-color)]'}`} />
             </div>
-
-            {/* Checkbox Lembre-se de Mim */}
             <div className="flex items-center gap-3 px-1">
               <label className="relative flex items-center cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  checked={rememberMe} 
-                  onChange={(e) => setRememberMe(e.target.checked)} 
-                  className="peer hidden" 
-                />
+                <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="peer hidden" />
                 <div className="w-5 h-5 border-2 border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-800 transition-all peer-checked:bg-[var(--primary-color)] peer-checked:border-[var(--primary-color)] flex items-center justify-center">
                   <CheckCircle2 size={12} className={`text-white transition-opacity ${rememberMe ? 'opacity-100' : 'opacity-0'}`} />
                 </div>
@@ -718,9 +792,7 @@ const App: React.FC = () => {
             <button type="submit" className="w-full gold-gradient text-white py-5 rounded-2xl font-bold uppercase text-xs tracking-[0.2em] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
               <span>Acessar</span><ArrowRight size={18} />
             </button>
-            <p className="text-[8px] font-extralight text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">
-              EXCLUSIVO PARA O STUDIO DANIELE DIAS NAILS
-            </p>
+            <p className="text-[8px] font-extralight text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">EXCLUSIVO PARA O STUDIO DANIELE DIAS NAILS</p>
           </div>
         </form>
       </div>
@@ -750,65 +822,27 @@ const App: React.FC = () => {
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Profissional</span>
             <h2 className="text-2xl font-black gold-text-gradient uppercase tracking-tight">{auth.username}</h2>
           </div>
-
-          {/* DASHBOARD RÁPIDO - ULTRA COMPACTO E ALINHADO */}
           <div className="w-full max-w-lg mx-auto flex items-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-[1.25rem] border border-slate-200/60 dark:border-slate-800/60 shadow-lg overflow-hidden flex-nowrap">
-            
-            {/* Controles de Data (Compactos) */}
             <div className="flex items-center gap-1 p-1.5 bg-slate-50 dark:bg-slate-800/40 border-r dark:border-slate-800 shrink-0">
               <div className="relative">
-                <select 
-                  value={quickReportMonth} 
-                  onChange={(e) => setQuickReportMonth(parseInt(e.target.value))}
-                  className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[45px]"
-                >
+                <select value={quickReportMonth} onChange={(e) => setQuickReportMonth(parseInt(e.target.value))} className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[45px]">
                   {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
                 </select>
                 <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={8} />
               </div>
-              
               <div className="relative">
-                <select 
-                  value={quickReportYear} 
-                  onChange={(e) => setQuickReportYear(parseInt(e.target.value))}
-                  className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[50px]"
-                >
+                <select value={quickReportYear} onChange={(e) => setQuickReportYear(parseInt(e.target.value))} className="bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none focus:ring-1 ring-[var(--primary-color)] transition-all cursor-pointer shadow-sm min-w-[50px]">
                   {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={8} />
               </div>
             </div>
-
-            {/* Indicadores Centrais */}
             <div className="flex-1 flex items-center justify-center gap-4 px-2 min-w-0">
-              {/* Clientes */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Users size={14} className="text-slate-400" />
-                <span className="text-[13px] font-black text-slate-600 dark:text-slate-200">
-                  {isQuickValuesVisible ? quickSummary.count : '••'}
-                </span>
-              </div>
-
-              {/* Divisor suave */}
+              <div className="flex items-center gap-1.5 shrink-0"><Users size={14} className="text-slate-400" /><span className="text-[13px] font-black text-slate-600 dark:text-slate-200">{isQuickValuesVisible ? quickSummary.count : '••'}</span></div>
               <div className="w-[1px] h-6 bg-slate-100 dark:bg-slate-800 shrink-0" />
-
-              {/* Ganhos (Saldo) */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Banknote size={14} className="text-emerald-500" />
-                <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                  {isQuickValuesVisible ? `R$ ${quickSummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}` : '••••'}
-                </span>
-              </div>
+              <div className="flex items-center gap-1.5 shrink-0"><Banknote size={14} className="text-emerald-500" /><span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{isQuickValuesVisible ? `R$ ${quickSummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}` : '••••'}</span></div>
             </div>
-
-            {/* Olho de Privacidade (Slot fixo no final) */}
-            <button 
-              onClick={() => setIsQuickValuesVisible(!isQuickValuesVisible)}
-              className={`h-10 w-10 flex items-center justify-center transition-all border-l border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 shrink-0 ${isQuickValuesVisible ? 'text-slate-300' : 'text-[var(--primary-color)]'}`}
-              title={isQuickValuesVisible ? "Ocultar Valores" : "Mostrar Valores"}
-            >
-              {isQuickValuesVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-            </button>
+            <button onClick={() => setIsQuickValuesVisible(!isQuickValuesVisible)} className={`h-10 w-10 flex items-center justify-center transition-all border-l border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 shrink-0 ${isQuickValuesVisible ? 'text-slate-300' : 'text-[var(--primary-color)]'}`}>{isQuickValuesVisible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
           </div>
         </div>
 
@@ -853,7 +887,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Menu Principal lateral */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[100] flex justify-end">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)}></div>
@@ -870,6 +903,7 @@ const App: React.FC = () => {
                     { label: 'Parceiras', icon: <HardHat size={18} />, action: () => setIsPartnersOpen(true) },
                     { label: 'Histórico', icon: <HistoryIcon size={18} />, action: () => setIsHistoryOpen(true) },
                     { label: 'Procedimentos', icon: <Sparkle size={18} />, action: () => setIsProceduresOpen(true) },
+                    { label: 'Despesas', icon: <ShoppingBag size={18} />, action: () => setIsExpensesOpen(true) },
                     { label: 'Financeiro', icon: <Briefcase size={18} />, action: () => setIsFinanceOpen(true) },
                     { label: 'Ajustes', icon: <Settings size={18} />, action: () => setIsSettingsOpen(true) }
                   ].map((item, idx) => (
@@ -897,18 +931,68 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL FINANCEIRO */}
+      {isExpensesOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-6 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center shrink-0">
+               <div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Despesas</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Gestão de Custos</p></div>
+               <button onClick={() => setIsExpensesOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-800/40 p-2 rounded-2xl">
+              {[{l: 'Dia', v: expenseDay, s: setExpenseDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: expenseWeek, s: setExpenseWeek, d: WEEKS}, {l: 'Mês', v: expenseMonth, s: setExpenseMonth, d: MONTHS}, {l: 'Ano', v: expenseYear, s: setExpenseYear, d: EXPENSE_YEARS}].map((f, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="relative">
+                    <select value={f.v} onChange={(e) => f.s(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-800 border-none rounded-xl p-2.5 text-[9px] font-bold outline-none appearance-none focus:ring-1 ring-[var(--primary-color)] shadow-sm">
+                      {f.d.map((val, idx) => <option key={idx} value={typeof val === 'string' && val === 'Todo' ? 0 : (i === 2 ? idx : (i === 3 ? val : idx))}>{val}</option>)}
+                    </select>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={8} /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-800/30 p-5 rounded-3xl space-y-4 border border-slate-100 dark:border-slate-800">
+               <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">O que comprou?</label><input value={newExpName} onChange={e => setNewExpName(e.target.value)} placeholder="Descrição da despesa" className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold outline-none focus:ring-1 ring-[var(--primary-color)] shadow-sm" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Forma de Pagamento</label><div className="grid grid-cols-3 gap-2">{PAYMENT_METHODS.map(m => (<button key={m} type="button" onClick={() => setNewExpPaymentMethod(m as PaymentMethod)} className={`py-2.5 rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all border ${newExpPaymentMethod === m ? 'border-red-500 bg-red-500 text-white shadow-md' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400'}`}>{m}</button>))}</div></div>
+                  <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Valor</label><input type="number" step="0.01" value={newExpValue} onChange={e => setNewExpValue(e.target.value)} placeholder="0,00" className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold outline-none focus:ring-1 ring-red-400 shadow-sm" /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Data</label><input type="date" value={newExpDate} onChange={e => setNewExpDate(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-xs font-bold focus:ring-1 ring-emerald-400 shadow-sm outline-none" /></div></div>
+               </div>
+               <button onClick={handleAddExpense} className="w-full bg-red-500 text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all mt-2"><Plus size={16} /> Adicionar Despesa</button>
+            </div>
+            <div className="p-6 bg-red-50 dark:bg-red-950/10 rounded-[2rem] text-center border border-red-100 dark:border-red-900/30"><span className="text-[9px] font-black uppercase tracking-[0.4em] text-red-500">Total Despesas Mensal</span><p className="text-3xl font-black text-red-600 dark:text-red-400 tracking-tighter mt-1">R$ {monthlyExpensesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               {[ {l: 'Custo Diário', d: chartExpensesWeekly, a: DAYS_ABBR}, {l: 'Custo Semanal', d: chartExpensesMonthly, a: financeWeekLabels}].map((c, i) => (
+                <div key={i} className="space-y-3">
+                  <div className="flex items-center gap-2 ml-1"><BarChart3 size={12} className="text-red-500" /><h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{c.l}</h4></div>
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-[2rem] border border-slate-100 dark:border-slate-800 space-y-2">
+                    {c.d.map((val, idx) => (
+                      <div key={idx} className="flex items-center gap-3"><span className="w-10 text-[7px] font-black text-slate-400 uppercase">{c.a[idx]}</span><div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500 rounded-full" style={{ width: `${(val / (Math.max(...c.d, 1))) * 100}%` }} /></div><span className="text-[9px] font-bold min-w-[40px] text-right">R$ {val.toFixed(0)}</span></div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-3">
+               <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Registros (Filtro Ativo)</h4>
+               <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                  {filteredExpenses.length > 0 ? filteredExpenses.map(exp => (
+                    <div key={exp.id} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800/30 rounded-2xl border border-slate-100 dark:border-slate-800 group transition-all">
+                       <div className="flex flex-col"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{exp.name}</span><div className="flex items-center gap-2"><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{exp.date.split('-').reverse().join('/')}</span><span className="text-[8px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 font-black uppercase tracking-tighter">{exp.paymentMethod || 'Pix'}</span></div></div>
+                       <div className="flex items-center gap-4"><span className="text-sm font-black text-red-500">R$ {exp.value.toFixed(2)}</span><button onClick={() => handleDeleteExpense(exp.id)} className="p-2 text-slate-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button></div>
+                    </div>
+                  )) : (<div className="text-center py-8 text-slate-300 font-bold uppercase text-[10px] tracking-widest border border-dashed border-slate-200 rounded-2xl">Nenhuma despesa no filtro selecionado</div>)}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isFinanceOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center shrink-0">
-               <div className="flex flex-col">
-                  <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Financeiro</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{auth.role === 'master' ? 'Relatório Geral' : `Relatório de ${auth.username}`}</p>
-               </div>
+               <div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Financeiro</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{auth.role === 'master' ? 'Relatório Geral' : `Relatório de ${auth.username}`}</p></div>
                <button onClick={() => setIsFinanceOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
             </div>
-            
             <div className="grid grid-cols-4 gap-2 shrink-0">
               {[{l: 'Dia', v: financeDay, s: setFinanceDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: financeWeek, s: setFinanceWeek, d: WEEKS}, {l: 'Mês', v: financeMonth, s: setFinanceMonth, d: MONTHS}, {l: 'Ano', v: financeYear, s: setFinanceYear, d: YEARS}].map((f, i) => (
                 <div key={i} className="space-y-1">
@@ -922,36 +1006,24 @@ const App: React.FC = () => {
                 </div>
               ))}
             </div>
-
             <div className="p-8 gold-gradient rounded-[2rem] text-white flex flex-col items-center text-center shadow-lg shrink-0">
               <div className="bg-white/20 p-3 rounded-2xl mb-4"><Banknote size={28} /></div>
               <span className="text-[9px] font-black uppercase tracking-[0.4em] opacity-80">{auth.role === 'master' ? 'Faturamento Studio' : 'Meu Ganho Total'}</span>
               <p className="text-4xl sm:text-5xl font-black tracking-tighter mt-1">R$ {monthlySummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               <div className="mt-5 px-5 py-2 bg-black/10 rounded-full border border-white/10 text-[10px] font-black uppercase tracking-[0.2em]">{monthlySummary.count} Atendimentos</div>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {[ {l: 'Faturamento Diário', d: chartDataWeekly, a: DAYS_ABBR}, {l: 'Faturamento Semanal', d: chartDataMonthly, a: financeWeekLabels}].map((c: {l: string, d: number[], a: string[]}, i) => (
+              {[ {l: 'Faturamento Diário', d: chartDataWeekly, a: DAYS_ABBR}, {l: 'Faturamento Semanal', d: chartDataMonthly, a: financeWeekLabels}].map((c, i) => (
                 <div key={i} className="space-y-4">
-                  <div className="flex items-center gap-2 ml-1">
-                    <BarChart3 size={14} className="text-[var(--primary-color)]" />
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.l}</h4>
-                  </div>
+                  <div className="flex items-center gap-2 ml-1"><BarChart3 size={14} className="text-[var(--primary-color)]" /><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.l}</h4></div>
                   <div className="bg-slate-50/50 dark:bg-slate-800/30 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 space-y-3">
-                    {c.d.map((val: number, idx: number) => (
-                      <div key={idx} className="flex items-center gap-3">
-                        <span className="w-12 text-[8px] font-black text-slate-400 uppercase">{c.a[idx]}</span>
-                        <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                          <div className="h-full gold-gradient rounded-full" style={{ width: `${(val / (Math.max(...(c.d as number[]), 1))) * 100}%` }} />
-                        </div>
-                        <span className="text-[10px] font-bold min-w-[50px] text-right">R$ {val.toFixed(0)}</span>
-                      </div>
+                    {c.d.map((val, idx) => (
+                      <div key={idx} className="flex items-center gap-3"><span className="w-12 text-[8px] font-black text-slate-400 uppercase">{c.a[idx]}</span><div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full gold-gradient rounded-full" style={{ width: `${(val / (Math.max(...c.d, 1))) * 100}%` }} /></div><span className="text-[10px] font-bold min-w-[50px] text-right">R$ {val.toFixed(0)}</span></div>
                     ))}
                   </div>
                 </div>
               ))}
             </div>
-
             {auth.role === 'master' && (
               <div className="p-4 sm:p-8 bg-slate-50 dark:bg-slate-800/30 rounded-[2rem] space-y-5 border border-slate-100 dark:border-slate-800">
                  <div className="flex justify-between items-center"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Progresso Anual</span><button onClick={() => { setIsEditingLimit(!isEditingLimit); setEditLimitValue(annualLimit.toString()); }} className="p-2 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={12} /></button></div>
@@ -963,18 +1035,10 @@ const App: React.FC = () => {
                  ) : (
                    <div>
                       <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter mb-4">R$ {yearlySummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                      <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 shadow-inner">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${yearlySummary.percentage}%` }}></div>
-                      </div>
+                      <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 shadow-inner"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${yearlySummary.percentage}%` }}></div></div>
                       <div className="flex flex-col gap-2 mt-4">
-                        <div className="flex items-center gap-2">
-                          <TrendingUpIcon size={12} className="text-emerald-500" />
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{yearlySummary.percentage.toFixed(1)}% Alcançado</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Target size={12} className="text-slate-400" />
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meta Limite: R$ {yearlySummary.limit.toLocaleString('pt-BR')}</span>
-                        </div>
+                        <div className="flex items-center gap-2"><TrendingUpIcon size={12} className="text-emerald-500" /><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{yearlySummary.percentage.toFixed(1)}% Alcançado</span></div>
+                        <div className="flex items-center gap-2"><Target size={12} className="text-slate-400" /><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meta Limite: R$ {yearlySummary.limit.toLocaleString('pt-BR')}</span></div>
                       </div>
                    </div>
                  )}
@@ -984,40 +1048,19 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL CLIENTES */}
       {isClientsOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center">
-               <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Meus Contatos</h2>
-               <div className="flex gap-2">
-                  <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 rounded-2xl hover:bg-indigo-100 transition-all"><Upload size={20} /></button>
-                  <button onClick={() => setIsClientsOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button>
-               </div>
-               <input type="file" ref={fileInputRef} onChange={handleImportVCF} accept=".vcf" className="hidden" />
-            </div>
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Procurar cliente..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)]" />
-            </div>
+            <div className="flex justify-between items-center"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Meus Contatos</h2><div className="flex gap-2"><button onClick={() => fileInputRef.current?.click()} className="p-3 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 rounded-2xl hover:bg-indigo-100 transition-all"><Upload size={20} /></button><button onClick={() => setIsClientsOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button></div><input type="file" ref={fileInputRef} onChange={handleImportVCF} accept=".vcf" className="hidden" /></div>
+            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Procurar cliente..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)]" /></div>
             <div className="space-y-4">
               {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.whatsapp.includes(clientSearch)).map((c, i) => (
                 <div key={i} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
                   {editingClientName === c.name ? (
-                    <div className="flex-1 flex gap-2">
-                      <input value={editClientName} onChange={e => setEditClientName(e.target.value)} className="flex-1 bg-white dark:bg-slate-900 p-3 rounded-xl text-xs font-bold" />
-                      <input value={editClientPhone} onChange={e => setEditClientPhone(e.target.value)} className="w-32 bg-white dark:bg-slate-900 p-3 rounded-xl text-xs font-bold" />
-                      <button onClick={() => handleUpdateClient(c.name)} className="p-3 bg-emerald-500 text-white rounded-xl"><CheckCircle2 size={16} /></button>
-                    </div>
+                    <div className="flex-1 flex gap-2"><input value={editClientName} onChange={e => setEditClientName(e.target.value)} className="flex-1 bg-white dark:bg-slate-900 p-3 rounded-xl text-xs font-bold" /><input value={editClientPhone} onChange={e => setEditClientPhone(e.target.value)} className="w-32 bg-white dark:bg-slate-900 p-3 rounded-xl text-xs font-bold" /><button onClick={() => handleUpdateClient(c.name)} className="p-3 bg-emerald-500 text-white rounded-xl"><CheckCircle2 size={16} /></button></div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl gold-gradient flex items-center justify-center text-white font-black">{c.name.charAt(0)}</div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{c.name}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.whatsapp}</p>
-                        </div>
-                      </div>
+                      <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl gold-gradient flex items-center justify-center text-white font-black">{c.name.charAt(0)}</div><div><p className="text-sm font-bold text-slate-700 dark:text-slate-200">{c.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.whatsapp}</p></div></div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                         <button onClick={() => { setEditingClientName(c.name); setEditClientName(c.name); setEditClientPhone(c.whatsapp); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button>
                         <button onClick={() => handleDeleteClient(c.name)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
@@ -1031,141 +1074,55 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL HISTÓRICO - ORGANIZADO */}
       {isHistoryOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 flex flex-col animate-in zoom-in-95 duration-300 max-h-[90vh]">
-             <div className="flex justify-between items-center mb-6 shrink-0">
-                <div className="flex flex-col">
-                  <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Histórico Geral</h2>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Busca e registros passados</p>
-                </div>
-                <button onClick={() => setIsHistoryOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button>
-             </div>
-
-             <div className="space-y-4 mb-6 shrink-0">
-               <div className="relative">
-                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                 <input 
-                   type="text" 
-                   value={historySearchQuery} 
-                   onChange={(e) => setHistorySearchQuery(e.target.value)} 
-                   placeholder="Procurar no histórico..." 
-                   className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] shadow-inner" 
-                 />
-               </div>
-               <div className="flex items-center gap-3 overflow-x-auto pb-1 custom-scrollbar">
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Filtrar por:</span>
-                 <select value={historyPartnerFilter} onChange={(e) => setHistoryPartnerFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-800 text-[10px] font-bold p-2.5 rounded-xl outline-none border border-slate-200 dark:border-slate-700">
-                    <option value="all">Todas Profissionais</option>
-                    <option value="Daniele Dias">Daniele Dias</option>
-                    {partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-                 </select>
-               </div>
-             </div>
-
+             <div className="flex justify-between items-center mb-6 shrink-0"><div className="flex flex-col"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Histórico Geral</h2><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Busca e registros passados</p></div><button onClick={() => setIsHistoryOpen(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"><X size={20} /></button></div>
+             <div className="space-y-4 mb-6 shrink-0"><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" value={historySearchQuery} onChange={(e) => setHistorySearchQuery(e.target.value)} placeholder="Procurar no histórico..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] shadow-inner" /></div><div className="flex items-center gap-3 overflow-x-auto pb-1 custom-scrollbar"><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Filtrar por:</span><select value={historyPartnerFilter} onChange={(e) => setHistoryPartnerFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-800 text-[10px] font-bold p-2.5 rounded-xl outline-none border border-slate-200 dark:border-slate-700"><option value="all">Todas Profissionais</option><option value="Daniele Dias">Daniele Dias</option>{partners.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}</select></div></div>
              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-10">
                 {Object.keys(groupedHistory).length > 0 ? (Object.entries(groupedHistory) as [string, Appointment[]][]).map(([date, apps]) => (
                   <div key={date} className="space-y-4">
-                    <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-3 px-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <CalendarDays size={14} className="text-[var(--primary-color)]" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 dark:text-slate-200">{formatHistoryDate(date)}</h3>
-                      </div>
-                      <span className="text-[9px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700">{(apps as Appointment[]).length} Registros</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {(apps as Appointment[]).map(app => (
-                        <AgendaItem 
-                          key={app.id} appointment={app} isHistory 
-                          onDelete={() => confirmDeleteAppointment(app.id)} 
-                          onEdit={() => { setEditingAppointment(app); setIsFormOpen(true); setIsHistoryOpen(false); }} 
-                          daysSinceLastVisit={null}
-                        />
-                      ))}
-                    </div>
+                    <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-3 px-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm"><div className="flex items-center gap-2"><CalendarDays size={14} className="text-[var(--primary-color)]" /><h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 dark:text-slate-200">{formatHistoryDate(date)}</h3></div><span className="text-[9px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700">{(apps as Appointment[]).length} Registros</span></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{(apps as Appointment[]).map(app => (<AgendaItem key={app.id} appointment={app} isHistory onDelete={() => confirmDeleteAppointment(app.id)} onEdit={() => { setEditingAppointment(app); setIsFormOpen(true); setIsHistoryOpen(false); }} daysSinceLastVisit={null}/>))}</div>
                   </div>
-                )) : (
-                  <div className="flex flex-col items-center justify-center py-20 text-slate-300 opacity-50 space-y-4">
-                    <HistoryIcon size={48} />
-                    <p className="font-bold uppercase tracking-widest text-xs">Nenhum registro encontrado</p>
-                  </div>
-                )}
+                )) : (<div className="flex flex-col items-center justify-center py-20 text-slate-300 opacity-50 space-y-4"><HistoryIcon size={48} /><p className="font-bold uppercase tracking-widest text-xs">Nenhum registro encontrado</p></div>)}
              </div>
           </div>
         </div>
       )}
 
-      {/* MODAL PROCEDIMENTOS */}
       {isProceduresOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-xl shadow-2xl p-8 space-y-8 animate-in zoom-in-95 duration-300">
-             <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Procedimentos</h2>
-                <button onClick={() => setIsProceduresOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
-             </div>
+             <div className="flex justify-between items-center"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Procedimentos</h2><button onClick={() => setIsProceduresOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button></div>
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                 <div className="space-y-4">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Principais</p>
-                   <div className="flex gap-2">
-                      <input value={newProcName} onChange={e => setNewProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" />
-                      <button onClick={handleAddProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button>
-                   </div>
-                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                      {(procedures as string[]).map(p => (
-                        <div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group">
-                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span>
-                          <button onClick={() => handleRemoveProcedure(p)} className="opacity-0 group-hover:opacity-100 transition-all text-red-400"><X size={14} /></button>
-                        </div>
-                      ))}
-                   </div>
+                   <div className="flex gap-2"><input value={newProcName} onChange={e => setNewProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" /><button onClick={handleAddProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
+                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">{(procedures as string[]).map(p => (<div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group"><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span><button onClick={() => handleRemoveProcedure(p)} className="opacity-0 group-hover:opacity-100 transition-all text-red-400"><X size={14} /></button></div>))}</div>
                 </div>
                 <div className="space-y-4">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Secundários</p>
-                   <div className="flex gap-2">
-                      <input value={newSecProcName} onChange={e => setNewSecProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" />
-                      <button onClick={handleAddSecondaryProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button>
-                   </div>
-                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                      {(secondaryProcedures as string[]).map(p => (
-                        <div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group">
-                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span>
-                          <button onClick={() => handleRemoveSecondaryProcedure(p)} className="opacity-0 group-hover:opacity-100 transition-all text-red-400"><X size={14} /></button>
-                        </div>
-                      ))}
-                   </div>
+                   <div className="flex gap-2"><input value={newSecProcName} onChange={e => setNewSecProcName(e.target.value)} placeholder="Novo..." className="flex-1 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs" /><button onClick={handleAddSecondaryProcedure} className="p-3 gold-gradient text-white rounded-xl"><Plus size={16} /></button></div>
+                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">{(secondaryProcedures as string[]).map(p => (<div key={p} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl group"><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p}</span><button onClick={() => handleRemoveSecondaryProcedure(p)} className="opacity-0 group-hover:opacity-100 transition-all text-red-400"><X size={14} /></button></div>))}</div>
                 </div>
              </div>
           </div>
         </div>
       )}
 
-      {/* MODAL PARCEIRAS */}
       {isPartnersOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-4 sm:p-8 space-y-8 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
-             <div className="flex justify-between items-center shrink-0">
-                <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Equipe</h2>
-                <button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
-             </div>
+             <div className="flex justify-between items-center shrink-0"><h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Equipe</h2><button onClick={() => setIsPartnersOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button></div>
              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Profissional</p>
                 <div className="grid grid-cols-2 gap-3">
                    <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Nome" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
                    <input value={newPartnerPass} onChange={e => setNewPartnerPass(e.target.value)} placeholder="Senha" type="text" className="bg-white dark:bg-slate-900 p-4 rounded-2xl text-xs font-bold" />
                    <div className="col-span-2 flex flex-col bg-white dark:bg-slate-900 p-5 rounded-2xl">
-                      <div className="flex flex-col">
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissão Porcentagem</span>
-                         <p className="text-[8px] text-slate-400 uppercase tracking-widest mt-1.5">Escolha a porcentagem</p>
-                      </div>
-                      <div className="relative mt-3">
-                        <select value={newPartnerCommission} onChange={e => setNewPartnerCommission(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-3.5 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">
-                           {Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (
-                             <option key={val} value={val}>{val}%</option>
-                           ))}
-                        </select>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div>
-                      </div>
+                      <div className="flex flex-col"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissão Porcentagem</span><p className="text-[8px] text-slate-400 uppercase tracking-widest mt-1.5">Escolha a porcentagem</p></div>
+                      <div className="relative mt-3"><select value={newPartnerCommission} onChange={e => setNewPartnerCommission(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-3.5 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">{Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (<option key={val} value={val}>{val}%</option>))}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div></div>
                    </div>
                 </div>
                 <button onClick={handleAddPartner} className="w-full gold-gradient text-white py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest shadow-lg">Cadastrar Parceira</button>
@@ -1175,43 +1132,13 @@ const App: React.FC = () => {
                   <div key={i} className="flex items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-800 group transition-all hover:border-[var(--primary-color)]">
                     {editingPartnerIndex === i ? (
                       <div className="w-full flex flex-col gap-3">
-                         <div className="flex flex-col sm:flex-row gap-2">
-                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)] min-w-0" />
-                            <input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" type="text" placeholder="Senha" />
-                         </div>
-                         <div className="flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-                            <div className="flex flex-col">
-                               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Alterar Comissão</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                               <div className="relative flex-1">
-                                  <select value={editPartnerCommission} onChange={e => setEditPartnerCommission(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-800 border-none rounded-xl py-3 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">
-                                     {Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (
-                                       <option key={val} value={val}>{val}%</option>
-                                     ))}
-                                  </select>
-                                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div>
-                               </div>
-                               <button onClick={() => handleUpdatePartner(i)} className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg active:scale-95 transition-all"><CheckCircle2 size={16} /></button>
-                            </div>
-                         </div>
+                         <div className="flex flex-col sm:flex-row gap-2"><input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)] min-w-0" /><input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-[var(--primary-color)]" type="text" placeholder="Senha" /></div>
+                         <div className="flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800"><div className="flex flex-col"><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Alterar Comissão</span></div><div className="flex items-center gap-3"><div className="relative flex-1"><select value={editPartnerCommission} onChange={e => setEditPartnerCommission(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-800 border-none rounded-xl py-3 pl-4 pr-10 text-sm font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)] text-[var(--primary-color)] transition-all">{Array.from({ length: 19 }, (_, i) => 10 + i * 5).map(val => (<option key={val} value={val}>{val}%</option>))}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={16} /></div></div><button onClick={() => handleUpdatePartner(i)} className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg active:scale-95 transition-all"><CheckCircle2 size={16} /></button></div></div>
                       </div>
                     ) : (
                       <>
-                         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center shrink-0"><HardHat size={20} /></div>
-                            <div className="min-w-0 flex-1">
-                               <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p>
-                               <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 px-2 py-0.5 rounded-full shrink-0">{p.commission}%</span>
-                                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">Login: {p.login}</span>
-                               </div>
-                            </div>
-                         </div>
-                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                            <button onClick={() => { setEditingPartnerIndex(i); setEditPartnerName(p.name); setEditPartnerPass(p.password); setEditPartnerCommission(p.commission || 50); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDeletePartner(i)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
-                         </div>
+                         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden"><div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 flex items-center justify-center shrink-0"><HardHat size={20} /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p><div className="flex items-center gap-2"><span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 px-2 py-0.5 rounded-full shrink-0">{p.commission}%</span><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">Login: {p.login}</span></div></div></div>
+                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0"><button onClick={() => { setEditingPartnerIndex(i); setEditPartnerName(p.name); setEditPartnerPass(p.password); setEditPartnerCommission(p.commission || 50); }} className="p-3 text-slate-400 hover:text-[var(--primary-color)]"><Edit2 size={16} /></button><button onClick={() => handleDeletePartner(i)} className="p-3 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button></div>
                       </>
                     )}
                   </div>
@@ -1221,115 +1148,20 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL AJUSTES - COMPACTADO */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
-             <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 shrink-0">
-                <div>
-                   <h2 className="text-lg font-bold dark:text-white uppercase tracking-tight">Ajustes Studio</h2>
-                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Configurações visuais</p>
-                </div>
-                <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400"><X size={20} /></button>
-             </div>
-
+             <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 shrink-0"><div><h2 className="text-lg font-bold dark:text-white uppercase tracking-tight">Ajustes Studio</h2><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Configurações visuais</p></div><button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400"><X size={20} /></button></div>
              <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                   <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Studio</label>
-                      <input value={studioName} onChange={e => setStudioName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" />
-                   </div>
-                   <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Subtítulo</label>
-                      <input value={studioSubtitle} onChange={e => setStudioSubtitle(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" />
-                   </div>
+                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Studio</label><input value={studioName} onChange={e => setStudioName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" /></div>
+                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Subtítulo</label><input value={studioSubtitle} onChange={e => setStudioSubtitle(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border-2 border-transparent focus:border-[var(--primary-color)] outline-none" /></div>
                 </div>
-
-                {/* Acesso Master */}
-                <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-[2rem] space-y-4 border border-amber-100 dark:border-amber-900/30">
-                   <div className="flex items-center gap-2">
-                      <ShieldCheck size={18} className="text-amber-500" />
-                      <h3 className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Acesso Master</h3>
-                   </div>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                         <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Usuário Master</label>
-                         <input 
-                           type="text" 
-                           value={masterUsername} 
-                           onChange={e => setMasterUsername(e.target.value)} 
-                           className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" 
-                         />
-                      </div>
-                      <div className="space-y-1">
-                         <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Senha Master</label>
-                         <input 
-                           type="text" 
-                           value={masterPassword} 
-                           onChange={e => setMasterPassword(e.target.value)} 
-                           className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" 
-                         />
-                      </div>
-                   </div>
-                </div>
-
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
-                   <div className="flex items-center justify-between mb-4">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ícone de Marca</label>
-                      <button 
-                        onClick={() => setIsIconsExpanded(!isIconsExpanded)}
-                        className="text-[9px] font-bold text-[var(--primary-color)] uppercase tracking-widest flex items-center gap-1"
-                      >
-                        {isIconsExpanded ? <><ChevronUp size={12} /> Menos</> : <><ChevronDown size={12} /> Todos</>}
-                      </button>
-                   </div>
-                   <div className="flex flex-wrap justify-center gap-2">
-                      {BRAND_ICON_OPTIONS.slice(0, isIconsExpanded ? 20 : 7).map(iconKey => (
-                        <button key={iconKey} onClick={() => setStudioIcon(iconKey)} className={`p-2 rounded-xl transition-all ${studioIcon === iconKey ? 'bg-[var(--primary-color)] text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-400 hover:scale-110'}`}>
-                           {React.cloneElement(BEAUTY_ICONS[iconKey] as React.ReactElement<any>, { size: 14 })}
-                        </button>
-                      ))}
-                   </div>
-                </div>
-
-                <div className="space-y-3">
-                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Estilo Visual</label>
-                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {COLOR_PALETTES.map(palette => (
-                        <button key={palette.id} onClick={() => setCurrentTheme(palette)} className={`flex items-center gap-2 p-2 rounded-xl border-2 transition-all ${currentTheme.id === palette.id ? 'border-[var(--primary-color)] bg-white dark:bg-slate-800' : 'border-transparent bg-slate-50 dark:bg-slate-900'}`}>
-                           <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: palette.id === 'custom' ? customColor : palette.primary }} />
-                           <span className="text-[10px] font-bold truncate">{palette.name}</span>
-                        </button>
-                      ))}
-                   </div>
-                   
-                   {currentTheme.id === 'custom' && (
-                     <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2">
-                        <div className="flex items-center gap-3">
-                           <input 
-                             type="color" 
-                             value={customColor} 
-                             onChange={(e) => setCustomColor(e.target.value)}
-                             className="w-10 h-10 rounded-lg cursor-pointer border-none p-0 bg-transparent outline-none"
-                           />
-                           <div className="flex-1">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">Cor Personalizada</span>
-                              <div className="flex items-center gap-2">
-                                 <PipetteIcon size={12} className="text-slate-400" />
-                                 <span className="text-[10px] font-mono font-bold uppercase text-slate-600 dark:text-slate-300">{customColor}</span>
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                   )}
-                </div>
+                <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-[2rem] space-y-4 border border-amber-100 dark:border-amber-900/30"><div className="flex items-center gap-2"><ShieldCheck size={18} className="text-amber-500" /><h3 className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Acesso Master</h3></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div className="space-y-1"><label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Usuário Master</label><input type="text" value={masterUsername} onChange={e => setMasterUsername(e.target.value)} className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" /></div><div className="space-y-1"><label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Senha Master</label><input type="text" value={masterPassword} onChange={e => setMasterPassword(e.target.value)} className="w-full bg-white dark:bg-slate-950 p-3 rounded-xl text-xs font-bold border border-slate-100 dark:border-slate-800 outline-none focus:border-amber-500" /></div></div></div>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800"><div className="flex items-center justify-between mb-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ícone de Marca</label><button onClick={() => setIsIconsExpanded(!isIconsExpanded)} className="text-[9px] font-bold text-[var(--primary-color)] uppercase tracking-widest flex items-center gap-1">{isIconsExpanded ? <><ChevronUp size={12} /> Menos</> : <><ChevronDown size={12} /> Todos</>}</button></div><div className="flex flex-wrap justify-center gap-2">{BRAND_ICON_OPTIONS.slice(0, isIconsExpanded ? 20 : 7).map(iconKey => (<button key={iconKey} onClick={() => setStudioIcon(iconKey)} className={`p-2 rounded-xl transition-all ${studioIcon === iconKey ? 'bg-[var(--primary-color)] text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-400 hover:scale-110'}`}>{React.cloneElement(BEAUTY_ICONS[iconKey] as React.ReactElement<any>, { size: 14 })}</button>))}</div></div>
+                <div className="space-y-3"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Estilo Visual</label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{COLOR_PALETTES.map(palette => (<button key={palette.id} onClick={() => setCurrentTheme(palette)} className={`flex items-center gap-2 p-2 rounded-xl border-2 transition-all ${currentTheme.id === palette.id ? 'border-[var(--primary-color)] bg-white dark:bg-slate-800' : 'border-transparent bg-slate-50 dark:bg-slate-900'}`}><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: palette.id === 'custom' ? customColor : palette.primary }} /><span className="text-[10px] font-bold truncate">{palette.name}</span></button>))}</div>{currentTheme.id === 'custom' && (<div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2"><div className="flex items-center gap-3"><input type="color" value={customColor} onChange={(e) => setCustomColor(e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-none p-0 bg-transparent outline-none" /><div className="flex-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">Cor Personalizada</span><div className="flex items-center gap-2"><PipetteIcon size={12} className="text-slate-400" /><span className="text-[10px] font-mono font-bold uppercase text-slate-600 dark:text-slate-300">{customColor}</span></div></div></div></div>)}</div>
              </div>
-
-             <div className="p-6 border-t dark:border-slate-800 shrink-0">
-                <button onClick={saveSettings} disabled={savingSettings} className="w-full gold-gradient text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-[0.2em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all">
-                   {savingSettings ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /><span>Salvar Alterações</span></>}
-                </button>
-             </div>
+             <div className="p-6 border-t dark:border-slate-800 shrink-0"><button onClick={saveSettings} disabled={savingSettings} className="w-full gold-gradient text-white py-4 rounded-xl font-bold uppercase text-[10px] tracking-[0.2em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all">{savingSettings ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /><span>Salvar Alterações</span></>}</button></div>
           </div>
         </div>
       )}
