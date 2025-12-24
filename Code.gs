@@ -49,6 +49,7 @@ function getOrCreateUserDatabase() {
         ["procedures", "Banho de Gel,Blindagem,Manicure"],
         ["secondaryProcedures", "Decoração Especial,Remoção,Reparo Unitário"]
       ]);
+      ss.insertSheet('Despesas');
     }
     
     return userSheetId;
@@ -65,10 +66,12 @@ function getUserData() {
     const appointmentsSheet = ss.getSheetByName('Agendamentos') || ss.insertSheet('Agendamentos');
     const clientsSheet = ss.getSheetByName('Clientes') || ss.insertSheet('Clientes');
     const configsSheet = ss.getSheetByName('Configuracoes') || ss.insertSheet('Configuracoes');
+    const expensesSheet = ss.getSheetByName('Despesas') || ss.insertSheet('Despesas');
     
     const appointments = appointmentsSheet.getDataRange().getValues();
     const clients = clientsSheet.getDataRange().getValues();
     const configs = configsSheet.getDataRange().getValues();
+    const expenses = expensesSheet.getDataRange().getValues();
     
     const configObj = {};
     configs.forEach(row => configObj[row[0]] = row[1]);
@@ -88,6 +91,14 @@ function getUserData() {
         paymentMethod: row[10] || 'Pagamento Pendente',
         partnerName: row[11] || 'Daniele Dias'
       })) : [],
+      expenses: expenses.length > 1 ? expenses.slice(1).map(row => ({
+        id: String(row[0]),
+        name: String(row[1]),
+        value: parseFloat(row[2]) || 0,
+        date: String(row[3]),
+        createdAt: row[4],
+        paymentMethod: row[5] || 'Pix'
+      })) : [],
       clients: clients.length > 1 ? clients.slice(1).map(row => ({
         name: String(row[0]), whatsapp: String(row[1]), lastVisitDate: String(row[2])
       })) : [],
@@ -97,6 +108,34 @@ function getUserData() {
   } catch (e) {
     return { error: e.message };
   }
+}
+
+function saveExpense(exp) {
+  const sheetId = getOrCreateUserDatabase();
+  const ss = SpreadsheetApp.openById(sheetId);
+  const sheet = ss.getSheetByName('Despesas') || ss.insertSheet('Despesas');
+  
+  if (!exp.id) exp.id = Utilities.getUuid();
+  exp.createdAt = Date.now();
+  
+  sheet.appendRow([exp.id, exp.name, exp.value, exp.date, exp.createdAt, exp.paymentMethod || 'Pix']);
+  return exp;
+}
+
+function deleteExpense(id) {
+  const sheetId = getOrCreateUserDatabase();
+  const ss = SpreadsheetApp.openById(sheetId);
+  const sheet = ss.getSheetByName('Despesas');
+  const data = sheet.getDataRange().getValues();
+  const idToFind = String(id).trim();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === idToFind) {
+      sheet.deleteRow(i + 1);
+      return true;
+    }
+  }
+  return false;
 }
 
 function saveAppointment(app) {
