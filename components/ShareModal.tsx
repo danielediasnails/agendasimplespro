@@ -1,7 +1,6 @@
 
 import React from 'react';
-// Fix: 'MessageSquareCheck' does not exist in standard lucide-react; replaced with 'MessageSquare'.
-import { X, CalendarCheck, SendHorizontal, MessageSquare } from 'lucide-react';
+import { X, CalendarCheck, MessageCircle, SendHorizontal } from 'lucide-react';
 import { Appointment } from '../types';
 
 interface ShareModalProps {
@@ -115,23 +114,23 @@ Pedimos por favor, a sua colaboração e compreensão, são informações para o
           <div className="space-y-3">
              <button 
                 onClick={() => handleShareWhatsApp('confirm')}
-                className="w-full flex items-center justify-center gap-3 p-5 gold-gradient text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all"
+                className="w-full flex items-center justify-center gap-3 p-5 green-gradient text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all"
               >
-                <SendHorizontal size={22} />
+                <MessageCircle size={22} />
                 <span className="text-xs font-bold uppercase tracking-widest">Confirmar Cliente</span>
               </button>
 
              <button 
-                onClick={() => handleShareWhatsApp('new')}
-                className="w-full flex items-center justify-center gap-3 p-5 green-gradient text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all"
+                onClick={() => handleShareWhatsApp('registered')}
+                className="w-full flex items-center justify-center gap-3 p-5 gold-gradient text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all"
               >
-                <MessageSquare size={22} />
+                <SendHorizontal size={22} />
                 <span className="text-xs font-bold uppercase tracking-widest">Cliente Nova</span>
               </button>
 
               <button 
-                onClick={() => handleShareWhatsApp('registered')}
-                className="w-full flex items-center justify-center gap-3 p-5 bg-slate-800 dark:bg-slate-700 text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all"
+                onClick={() => handleShareWhatsApp('new')}
+                className="w-full flex items-center justify-center gap-3 p-5 gold-gradient text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all"
               >
                 <SendHorizontal size={22} />
                 <span className="text-xs font-bold uppercase tracking-widest">Cliente Cadastrada</span>
