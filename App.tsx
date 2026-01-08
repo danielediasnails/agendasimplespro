@@ -175,9 +175,9 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   
-  // Lógica de Instalação PWA
+  // Lógica de Instalação PWA - Forçada visibilidade inicial
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [showInstallBtn, setShowInstallBtn] = useState(true);
 
   const [studioName, setStudioName] = useState('Daniele Dias Nails');
   const [studioSubtitle, setStudioSubtitle] = useState('Studio Nails');
@@ -323,39 +323,44 @@ const App: React.FC = () => {
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstallBtn(true);
     };
 
     window.addEventListener('beforeinstallprompt', handler);
 
-    // Verificar se já está instalado ou em iOS
+    // Esconde apenas se já estiver rodando como app instalado
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
     if (isStandalone) {
       setShowInstallBtn(false);
-    } else if (isIOS) {
-      setShowInstallBtn(true); // iOS sempre mostra pois o prompt nativo não existe
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstallClick = async () => {
+    console.log('Botão clicado');
+    window.alert('Botão acionado!');
+    
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     
     if (isIOS) {
-      alert('No iPhone, toque no ícone de compartilhar e selecione "Adicionar à Tela de Início" para instalar.');
+      alert('No iPhone, toque no ícone de compartilhar e selecione "Adicionar à Tela de Início"');
       return;
     }
 
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        setShowInstallBtn(false);
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setDeferredPrompt(null);
+          setShowInstallBtn(false);
+        }
+      } catch (err) {
+        console.error('Erro ao disparar prompt:', err);
+        alert('Para instalar, acesse o menu do navegador e selecione "Instalar Aplicativo"');
       }
+    } else {
+      alert('Para instalar, acesse o menu do navegador e selecione "Instalar Aplicativo"');
     }
   };
 
@@ -1070,7 +1075,7 @@ const App: React.FC = () => {
   );
 
   if (!auth.isAuthenticated) return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6">
+    <div className="h-screen h-[100dvh] w-full bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 overflow-hidden">
       <div className="w-full max-sm space-y-8 animate-in fade-in zoom-in-95 duration-700 flex flex-col items-center">
         <div className="flex flex-col items-center text-center">
           <div className="text-[var(--primary-color)] mb-6 drop-shadow-sm">
@@ -1125,17 +1130,6 @@ const App: React.FC = () => {
             <button type="submit" className="w-full gold-gradient text-white py-6 rounded-2xl font-black uppercase text-xs tracking-[0.3em] shadow-[0_10px_20px_-10px_rgba(212,175,55,0.4)] active:scale-95 hover:scale-[1.02] transition-all">
               Acessar
             </button>
-
-            {showInstallBtn && (
-              <button 
-                type="button" 
-                onClick={handleInstallClick}
-                className="w-full flex items-center justify-center gap-2 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 hover:text-[var(--primary-color)] transition-all border border-slate-100 dark:border-slate-800 rounded-2xl active:scale-95"
-              >
-                <Smartphone size={14} />
-                Instalar no Celular
-              </button>
-            )}
           </div>
           
           {loginError && (
@@ -1143,7 +1137,18 @@ const App: React.FC = () => {
           )}
         </form>
 
-        <div className="flex flex-col items-center gap-2 mt-8 opacity-40">
+        {showInstallBtn && (
+          <button 
+            type="button" 
+            onClick={handleInstallClick}
+            className="w-full max-w-xs flex items-center justify-center gap-2 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--primary-color)] hover:text-[var(--primary-hover)] transition-all border border-[var(--primary-color)]/20 dark:border-slate-800 rounded-2xl active:scale-95 shadow-sm bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
+          >
+            <Smartphone size={14} />
+            Instalar App no Celular
+          </button>
+        )}
+
+        <div className="flex flex-col items-center gap-2 mt-4 opacity-40">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">JG Creator</p>
           <div className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700"></div>
         </div>
@@ -2547,7 +2552,7 @@ const App: React.FC = () => {
 
       {isExpensesOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-l-[2.5rem] rounded-r-none w-full max-w-lg shadow-2xl p-6 sm:p-8 space-y-8 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
+          <div className="bg-white dark:bg-slate-900 rounded-l-[2.5rem] rounded-r-none w-full max-lg shadow-2xl p-6 sm:p-8 space-y-8 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2">
             <div className="flex justify-between items-center shrink-0">
                <div className="flex flex-col">
                  <h2 className="text-xl font-black uppercase tracking-tight">Despesas</h2>
