@@ -2604,7 +2604,7 @@ const App: React.FC = () => {
                     <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Pagamento</label>
                     <div className="grid grid-cols-3 gap-2">
                       {PAYMENT_METHODS.map(m => (
-                        <button key={m} type="button" onClick={() => setPaymentMethod(m as PaymentMethod)} className={`p-4 rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all border-2 ${paymentMethod === m ? 'border-red-500 bg-red-500 text-white shadow-lg' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400'}`}>
+                        <button key={m} type="button" onClick={() => setNewExpPaymentMethod(m as PaymentMethod)} className={`p-4 rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all border-2 ${newExpPaymentMethod === m ? 'border-red-500 bg-red-500 text-white shadow-lg' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400'}`}>
                           {m}
                         </button>
                       ))}
