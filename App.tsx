@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
@@ -13,7 +14,7 @@ import {
   TrendingDown, Calendar as LucideCalendar, Hash, LayoutGrid, Banknote, Phone, History as HistoryIcon, UserPlus, HardHat, Key,
   AlertCircle, TrendingUp as TrendingUpIcon, Percent, AlertTriangle, Pipette as PipetteIcon,
   ShoppingBag, GripVertical, FileUp, Sun, Moon, Shield, UserCog, UserMinus, Unlock, ShieldAlert, Image as ImageIcon,
-  CalendarOff, TimerOff, Smartphone
+  CalendarOff, TimerOff, Smartphone, Bell, BellRing
 } from 'lucide-react';
 import Cropper from 'cropperjs';
 import { Appointment, Client, PaymentMethod, Partner, Expense, Procedure } from './types';
@@ -226,6 +227,13 @@ const App: React.FC = () => {
   const [tempImageToCrop, setTempImageToCrop] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState('');
   
+  // NOVOS ESTADOS: Confirmação e Lembrete
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [reminderTime, setReminderTime] = useState(() => localStorage.getItem('studio_reminder_time') || '18:00');
+  const [isReminderActive, setIsReminderActive] = useState(() => localStorage.getItem('studio_reminder_active') === 'true');
+  const [isReminderBannerVisible, setIsReminderBannerVisible] = useState(false);
+  const lastAlertTimeRef = useRef<string | null>(null);
+
   const [appointmentToDelete, setAppointmentToDelete] = useState<string | null>(null);
   const [sharingAppointment, setSharingAppointment] = useState<Appointment | null>(null);
   const [isManualShare, setIsManualShare] = useState(false);
@@ -237,7 +245,7 @@ const App: React.FC = () => {
   
   const [expenseYear, setExpenseYear] = useState(new Date().getFullYear());
   const [expenseMonth, setExpenseMonth] = useState(new Date().getMonth());
-  const [expenseDay, setExpenseDay] = useState(0);
+  const [expenseDay, setHighlightDay] = useState(0);
   const [expenseWeek, setExpenseWeek] = useState(0);
   
   const [newExpName, setNewExpName] = useState('');
@@ -335,6 +343,51 @@ const App: React.FC = () => {
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
+
+  // FUNÇÃO DE SOM NATIVA (PING)
+  const playPingSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Tom harmônico A5
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {}
+  };
+
+  // SISTEMA DE LEMBRETE INTERNO (UI BANNER)
+  useEffect(() => {
+    let interval: number;
+    if (isReminderActive && auth.isAuthenticated) {
+      interval = window.setInterval(() => {
+        const now = new Date();
+        const currentH = now.getHours().toString().padStart(2, '0');
+        const currentM = now.getMinutes().toString().padStart(2, '0');
+        const currentTimeStr = `${currentH}:${currentM}`;
+        
+        if (currentTimeStr === reminderTime && lastAlertTimeRef.current !== currentTimeStr) {
+          lastAlertTimeRef.current = currentTimeStr;
+          
+          // Dispara o aviso interno (UI Banner)
+          setIsReminderBannerVisible(true);
+          playPingSound();
+        }
+      }, 15000); // Checa a cada 15 segundos
+    }
+    return () => clearInterval(interval);
+  }, [isReminderActive, reminderTime, auth]);
+
+  useEffect(() => {
+    localStorage.setItem('studio_reminder_time', reminderTime);
+    localStorage.setItem('studio_reminder_active', String(isReminderActive));
+  }, [reminderTime, isReminderActive]);
 
   const handleInstallClick = async () => {
     console.log('Botão clicado');
@@ -451,12 +504,12 @@ const App: React.FC = () => {
   const filteredExpenses = useMemo(() => {
     return (expenses || []).filter(exp => {
       const d = new Date(exp.date + 'T12:00:00');
-      if (d.getFullYear() !== expenseYear || d.getMonth() !== expenseMonth) return false;
-      if (expenseDay !== 0) return d.getDate() === expenseDay;
-      if (expenseWeek !== 0) return getWeekOfMonth(d) === expenseWeek;
+      if (d.getFullYear() !== financeYear || d.getMonth() !== financeMonth) return false;
+      if (financeDay !== 0) return d.getDate() === financeDay;
+      if (financeWeek !== 0) return getWeekOfMonth(d) === financeWeek;
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [expenses, expenseDay, expenseWeek, expenseMonth, expenseYear]);
+  }, [expenses, financeDay, financeWeek, financeMonth, financeYear]);
 
   const expenseSummary = useMemo(() => {
     const total = filteredExpenses.reduce((sum, exp) => sum + Number(exp.value || 0), 0);
@@ -466,34 +519,34 @@ const App: React.FC = () => {
   const annualExpenseTotal = useMemo(() => {
     return (expenses || []).filter(exp => {
       const d = new Date(exp.date + 'T12:00:00');
-      return d.getFullYear() === expenseYear;
+      return d.getFullYear() === financeYear;
     }).reduce((sum, exp) => sum + Number(exp.value || 0), 0);
-  }, [expenses, expenseYear]);
+  }, [expenses, financeYear]);
 
   const chartDataWeeklyExpenses = useMemo<number[]>(() => {
     const days = [0, 0, 0, 0, 0, 0, 0];
     expenses.forEach(exp => {
       const d = new Date(exp.date + 'T12:00:00');
-      if (d.getMonth() === expenseMonth && d.getFullYear() === expenseYear) {
-        if (expenseWeek === 0 || getWeekOfMonth(d) === expenseWeek) {
+      if (d.getMonth() === financeMonth && d.getFullYear() === financeYear) {
+        if (financeWeek === 0 || getWeekOfMonth(d) === financeWeek) {
           days[d.getDay()] += Number(exp.value || 0);
         }
       }
     });
     return days;
-  }, [expenses, expenseMonth, expenseYear, expenseWeek]);
+  }, [expenses, financeMonth, financeYear, financeWeek]);
 
   const chartDataMonthlyExpenses = useMemo<number[]>(() => {
     const weeks = [0, 0, 0, 0, 0];
     expenses.forEach(exp => {
       const d = new Date(exp.date + 'T12:00:00');
-      if (d.getMonth() === expenseMonth && d.getFullYear() === expenseYear) {
+      if (d.getMonth() === financeMonth && d.getFullYear() === financeYear) {
         const weekIdx = getWeekOfMonth(d) - 1;
         if (weekIdx >= 0 && weekIdx < 5) weeks[weekIdx] += Number(exp.value || 0);
       }
     });
     return weeks;
-  }, [expenses, expenseMonth, expenseYear]);
+  }, [expenses, financeMonth, financeYear]);
 
   const filteredAppointments = useMemo(() => {
     let base = appointments || [];
@@ -528,7 +581,7 @@ const App: React.FC = () => {
       },
       occupied: {
         standard: (userTimes || []).filter(t => occupiedTimesSet.has(t)),
-        free: (userFreeTimes || []).filter(t => occupiedTimesSet.has(t))
+        free: (userFreeTimes || []).filter(t => !occupiedTimesSet.has(t))
       }
     };
   }, [userTimes, userFreeTimes, filteredAppointments, searchQuery, blockedTimes, selectedDate]);
@@ -1062,6 +1115,34 @@ const App: React.FC = () => {
 
   const isDayBlocked = auth.role === 'master' ? !!blockedDays[selectedDate] : false;
 
+  // LÓGICA DE CONFIRMAÇÃO DE AMANHÃ
+  const tomorrowStr = useMemo(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  }, []);
+
+  const tomorrowAppointments = useMemo(() => {
+    return (appointments || []).filter(app => {
+      if (auth.role === 'partner') {
+        return app.date === tomorrowStr && app.partnerName === auth.username;
+      }
+      return app.date === tomorrowStr;
+    }).sort((a, b) => a.time.localeCompare(b.time));
+  }, [appointments, tomorrowStr, auth]);
+
+  const handleSendConfirmation = (app: Appointment) => {
+    const phone = app.whatsapp.replace(/\D/g, '');
+    const [y, m, d] = app.date.split('-');
+    const formattedDate = `${d}/${m}`;
+    const formattedTime = app.time.includes(':00') ? app.time.split(':')[0] + 'h' : app.time.replace(':', 'h');
+    
+    // MENSAGEM CONFORME PADRÃO SOLICITADO
+    const message = `Olá, posso confirmar seu horário (${formattedDate} às ${formattedTime})?`;
+    const text = encodeURIComponent(message);
+    window.open(`https://wa.me/${phone.startsWith('55') ? phone : `55${phone}`}?text=${text}`, '_blank');
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700">
       <div className="relative">
@@ -1158,6 +1239,22 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-inherit text-inherit pb-24 transition-colors duration-500">
+      {/* BANNER DE LEMBRETE INTERNO ESTILO WHATSAPP */}
+      {isReminderBannerVisible && (
+        <div className="fixed top-0 left-0 right-0 z-[1000] bg-[#25D366] text-white p-4 shadow-2xl flex items-center justify-between animate-in slide-in-from-top duration-500 border-b border-white/10">
+          <div className="flex items-center gap-3 ml-4">
+            <MessageCircle className="animate-pulse" size={20} />
+            <span className="font-black uppercase tracking-tighter text-sm sm:text-base">⏰ HORA DE CONFIRMAR AS CLIENTES!</span>
+          </div>
+          <button 
+            onClick={() => setIsReminderBannerVisible(false)} 
+            className="p-2 hover:bg-black/10 rounded-full transition-all mr-4"
+          >
+            <X size={24} />
+          </button>
+        </div>
+      )}
+
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 px-6 py-6 shadow-sm">
         <div className="max-w-5xl mx-auto flex justify-between items-center gap-4">
           <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -1596,7 +1693,7 @@ const App: React.FC = () => {
                 </div>
 
                 {blockedTimes[selectedDate] && blockedTimes[selectedDate].length > 0 && (
-                   <div className="space-y-4 pt-4 border-t dark:border-slate-800">
+                   <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                       <p className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-1">Remover Bloqueios de Hoje:</p>
                       <div className="flex flex-wrap gap-2">
                         {blockedTimes[selectedDate].map(time => (
@@ -1615,7 +1712,7 @@ const App: React.FC = () => {
                 )}
              </div>
 
-             <div className="p-8 border-t dark:border-slate-800 flex gap-4">
+             <div className="p-8 border-t border-slate-100 dark:border-slate-800 flex gap-4">
                 <button onClick={() => { setIsTimeBlockModalOpen(false); setSelectedTimesForBlocking([]); }} className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl font-bold uppercase text-xs tracking-widest shadow-sm active:scale-95 transition-all">Cancelar</button>
                 <button 
                   onClick={() => {
@@ -1639,7 +1736,7 @@ const App: React.FC = () => {
 
       {isSlotsModalOpen && auth.role === 'master' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-l-[2.5rem] rounded-r-none w-full max-w-lg shadow-2xl p-6 sm:p-8 space-y-8 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2 animate-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 rounded-l-[2.5rem] rounded-r-none w-full max-lg shadow-2xl p-6 sm:p-8 space-y-8 max-h-[90vh] overflow-y-auto custom-scrollbar pr-2 animate-in zoom-in-95">
             <div className="flex justify-between items-center shrink-0">
                <div className="flex flex-col">
                  <h2 className="text-xl font-black uppercase tracking-tight">Disponibilidade</h2>
@@ -1817,7 +1914,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t dark:border-slate-800">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                <button 
                  onClick={() => { setIsSlotsModalOpen(false); setIsFreeTimesExpanded(false); setIsFormOpen(true); }}
                  className="w-full gold-gradient text-white py-4 rounded-2xl font-bold uppercase text-[10px] tracking-[0.3em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all"
@@ -1846,7 +1943,7 @@ const App: React.FC = () => {
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
                   placeholder="Ex: Treinamento, Folga, Reforma..."
-                  className="w-full bg-slate-50 dark:bg-slate-800 border p-4 rounded-2xl outline-none focus:ring-2 ring-red-500 font-bold text-sm h-32"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 p-4 rounded-2xl outline-none focus:ring-2 ring-red-500 font-bold text-sm h-32"
                 />
              </div>
              <div className="flex gap-4">
@@ -1860,7 +1957,7 @@ const App: React.FC = () => {
       {isCropModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-[4px] animate-in fade-in duration-300">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-             <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                <div>
                  <h2 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-tight">Ajustar Foto da Logo</h2>
                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Arraste e use o zoom para enquadrar</p>
@@ -1872,7 +1969,7 @@ const App: React.FC = () => {
                   <img ref={cropImageRef} src={tempImageToCrop || ''} onLoad={initCropper} className="max-w-full block" alt="Foto para recortar" />
                </div>
              </div>
-             <div className="p-6 bg-white dark:bg-slate-900 border-t dark:border-slate-800 flex gap-4">
+             <div className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-4">
                 <button onClick={() => setIsCropModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-xl font-bold uppercase text-xs tracking-widest active:scale-95 transition-all">Cancelar</button>
                 <button onClick={handleSaveCrop} className="flex-1 py-4 gold-gradient text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
                   <Save size={18} />
@@ -1892,6 +1989,10 @@ const App: React.FC = () => {
                <button onClick={() => setIsMenuOpen(false)} className="p-3 text-slate-400 hover:scale-110 transition-transform shrink-0"><X size={28} /></button>
             </div>
             <nav className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-4">
+              <button onClick={() => { setIsConfirmModalOpen(true); setIsMenuOpen(false); }} className="w-full flex items-center gap-5 p-5 rounded-2xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-widest text-xs shadow-sm hover:shadow-md transition-all">
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 shadow-sm text-emerald-500 shrink-0"><CheckCircle2 size={22} /></div>
+                <span className="truncate">Confirmar Cliente</span>
+              </button>
               {auth.role === 'master' ? (
                 <>
                   {[
@@ -1918,6 +2019,87 @@ const App: React.FC = () => {
               )}
               <button onClick={handleLogout} className="w-full flex items-center gap-5 p-5 rounded-2xl bg-red-50 text-red-600 mt-8 border border-red-100 font-bold text-xs uppercase tracking-widest"><LogOut size={22} /><span>Sair</span></button>
             </nav>
+          </div>
+        </div>
+      )}
+
+      {/* NOVO MODAL: CONFIRMAR CLIENTE */}
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
+               <div className="flex flex-col">
+                  <h3 className="text-xl font-black uppercase tracking-tight text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                    <CheckCircle2 size={24} /> Confirmar Clientes
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Agendamentos de Amanhã ({tomorrowStr.split('-').reverse().join('/')})</p>
+               </div>
+               <button onClick={() => setIsConfirmModalOpen(false)} className="p-2 text-slate-400 hover:scale-110 transition-transform"><X size={24} /></button>
+            </div>
+
+            <div className="p-6 bg-slate-50/50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 shrink-0">
+               <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex-1 space-y-1 w-full">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Horário do Lembrete</label>
+                    <div className="relative">
+                       <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                       <input 
+                         type="time" 
+                         value={reminderTime} 
+                         onChange={(e) => setReminderTime(e.target.value)}
+                         className="w-full bg-white dark:bg-slate-900 p-3 pl-10 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 ring-[var(--primary-color)] transition-all"
+                       />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 w-full sm:w-auto pt-4 sm:pt-0">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">Ligar Lembrete</span>
+                    <button 
+                      onClick={() => setIsReminderActive(!isReminderActive)}
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${isReminderActive ? 'bg-emerald-500 shadow-md' : 'bg-slate-200 dark:bg-slate-700'}`}
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${isReminderActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                      {isReminderActive && <BellRing size={10} className="absolute left-1.5 text-white animate-pulse" />}
+                    </button>
+                  </div>
+               </div>
+               {isReminderActive && (
+                 <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-3 flex items-center gap-1 animate-in fade-in">
+                   <AlertCircle size={10} /> O app irá lhe avisar às {reminderTime}
+                 </p>
+               )}
+            </div>
+            
+            <div className="flex-1 p-8 overflow-y-auto custom-scrollbar space-y-4">
+               {tomorrowAppointments.length > 0 ? tomorrowAppointments.map((app) => (
+                 <div key={app.id} className="p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800/40 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-all">
+                    <div className="flex items-center gap-4 min-w-0 pr-4">
+                       <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center shrink-0 shadow-inner group-hover:border-emerald-200">
+                          <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{app.time.replace(':', 'h')}</span>
+                       </div>
+                       <div className="flex flex-col min-w-0">
+                          <h4 className="text-sm font-black uppercase tracking-tight truncate group-hover:text-emerald-600 transition-colors">{app.clientName}</h4>
+                          <div className="flex items-center gap-2 mt-0.5">
+                             <Sparkles size={10} className="text-[var(--primary-color)]" />
+                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">{app.procedure}</span>
+                             {app.secondaryProcedure && <><span className="w-1 h-1 rounded-full bg-slate-200" /><span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest truncate">{app.secondaryProcedure}</span></>}
+                          </div>
+                       </div>
+                    </div>
+                    <button 
+                      onClick={() => handleSendConfirmation(app)}
+                      className="p-4 bg-emerald-500 text-white rounded-2xl shadow-md active:scale-95 transition-all flex items-center gap-2 shrink-0 group-hover:shadow-emerald-200"
+                    >
+                      <MessageCircle size={20} />
+                      <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Confirmar</span>
+                    </button>
+                 </div>
+               )) : (
+                 <div className="flex flex-col items-center justify-center py-20 text-slate-300 opacity-50 space-y-4">
+                    <CalendarOff size={48} />
+                    <p className="font-bold uppercase tracking-widest text-xs">Nenhum agendamento para amanhã</p>
+                 </div>
+               )}
+            </div>
           </div>
         </div>
       )}
@@ -1963,7 +2145,7 @@ const App: React.FC = () => {
                     <input 
                       value={studioName} 
                       onChange={e => setStudioName(e.target.value)} 
-                      className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-sm font-bold border outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" 
+                      className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-sm font-bold border border-slate-200 outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" 
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1971,7 +2153,7 @@ const App: React.FC = () => {
                     <input 
                       value={studioSubtitle} 
                       onChange={e => setStudioSubtitle(e.target.value)} 
-                      className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-sm font-bold border outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" 
+                      className="w-full bg-white dark:bg-slate-900 p-3.5 rounded-xl text-sm font-bold border border-slate-200 outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" 
                     />
                   </div>
                </div>
@@ -1994,7 +2176,7 @@ const App: React.FC = () => {
                         <button 
                           key={m.id} 
                           onClick={() => setThemeMode(m.id as AppearanceMode)}
-                          className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-[9px] font-black uppercase transition-all ${themeMode === m.id ? 'bg-[var(--primary-color)] text-white border-[var(--primary-color)] shadow-md' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                          className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-[9px] font-black uppercase transition-all ${themeMode === m.id ? 'bg-[var(--primary-color)] text-white border-[var(--primary-color)] shadow-md' : 'bg-white dark:bg-slate-900 text-slate-400 border border-slate-200 dark:border-slate-800'}`}
                         >
                           {m.icon}
                           <span>{m.label}</span>
@@ -2033,7 +2215,7 @@ const App: React.FC = () => {
                </div>
             </div>
 
-            <div className="pt-2 border-t dark:border-slate-800">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                <button 
                  onClick={saveSettings} 
                  disabled={savingSettings} 
@@ -2067,18 +2249,18 @@ const App: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome</label>
-                      <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Nome completo" className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" />
+                      <input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Nome completo" className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border border-slate-200 outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Comissão (%)</label>
-                      <input type="number" value={newPartnerCommission} onChange={e => setNewPartnerCommission(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" />
+                      <input type="number" value={newPartnerCommission} onChange={e => setNewPartnerCommission(parseInt(e.target.value))} className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border border-slate-200 outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input type="text" value={newPartnerPass} onChange={e => setNewPartnerPass(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-3 pl-10 rounded-xl text-sm font-bold border outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" />
+                      <input type="text" value={newPartnerPass} onChange={e => setNewPartnerPass(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-3 pl-10 rounded-xl text-sm font-bold border border-slate-200 outline-none shadow-sm focus:border-[var(--primary-color)] transition-all" />
                     </div>
                   </div>
                   <button onClick={handleAddPartner} className="w-full gold-gradient text-white py-3.5 rounded-xl font-bold uppercase text-[10px] tracking-[0.2em] shadow-lg active:scale-95 transition-all">Cadastrar Profissional</button>
@@ -2096,12 +2278,12 @@ const App: React.FC = () => {
                       {editingPartnerIdx === i ? (
                         <div className="space-y-4">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border outline-none" />
-                            <input value={editPartnerLogin} onChange={e => setEditPartnerLogin(e.target.value)} placeholder="Login" className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border outline-none" />
+                            <input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} placeholder="Nome" className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border border-slate-200 outline-none" />
+                            <input value={editPartnerLogin} onChange={e => setEditPartnerLogin(e.target.value)} placeholder="Login" className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border border-slate-200 outline-none" />
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} placeholder="Senha" className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border outline-none" />
-                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border">
+                            <input value={editPartnerPass} onChange={e => setEditPartnerPass(e.target.value)} placeholder="Senha" className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold border border-slate-200 outline-none" />
+                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200">
                               <Percent size={14} className="text-slate-400" />
                               <input type="number" value={editPartnerCommission} onChange={e => setEditPartnerCommission(parseInt(e.target.value))} className="bg-transparent text-sm font-bold outline-none w-full" />
                             </div>
@@ -2159,7 +2341,7 @@ const App: React.FC = () => {
             <div className="flex gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={22} />
-                <input type="text" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Procurar cliente..." className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 sm:p-5 pl-14 text-lg font-bold outline-none" />
+                <input type="text" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Procurar cliente..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 rounded-2xl p-4 sm:p-5 pl-14 text-lg font-bold outline-none" />
               </div>
               <button onClick={() => vcfInputRef.current?.click()} className="p-4 sm:p-5 bg-[var(--primary-color)]/10 text-[var(--primary-color)] rounded-2xl hover:bg-[var(--primary-color)] hover:text-white transition-all group" title="Importar contatos (VCF)">
                 <FileUp size={24} />
@@ -2169,12 +2351,12 @@ const App: React.FC = () => {
 
             <div className="space-y-4">
               {(clients || []).filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map((c, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-[1.5rem] border group shadow-sm hover:border-[var(--primary-color)] transition-colors">
+                <div key={i} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-[1.5rem] border border-slate-100 group shadow-sm hover:border-[var(--primary-color)] transition-colors">
                   {editingClientName === c.name ? (
                     <div className="flex-1 flex gap-3">
                       <div className="flex-1 space-y-2">
-                        <input value={editClientName} onChange={e => setEditClientName(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-4 rounded-xl text-sm font-bold border" placeholder="Nome" />
-                        <input value={editClientPhone} onChange={e => setEditClientPhone(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-4 rounded-xl text-sm font-bold border" placeholder="WhatsApp" />
+                        <input value={editClientName} onChange={e => setEditClientName(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-4 rounded-xl text-sm font-bold border border-slate-200" placeholder="Nome" />
+                        <input value={editClientPhone} onChange={e => setEditClientPhone(e.target.value)} className="w-full bg-white dark:bg-slate-900 p-4 rounded-xl text-sm font-bold border border-slate-200" placeholder="WhatsApp" />
                       </div>
                       <button onClick={() => handleUpdateClient(c.name)} className="p-4 bg-emerald-500 text-white rounded-xl self-center shadow-md active:scale-95 transition-all"><CheckCircle2 size={20} /></button>
                       <button onClick={() => setEditingClientName(null)} className="p-4 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl self-center active:scale-95 transition-all"><X size={20} /></button>
@@ -2245,7 +2427,7 @@ const App: React.FC = () => {
              <div className="space-y-12">
                 {Object.keys(groupedHistory).length > 0 ? Object.entries(groupedHistory).map(([date, apps]) => (
                   <div key={date} className="space-y-6">
-                    <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-4 px-6 rounded-[1.5rem] border-2 flex justify-between items-center shadow-md">
+                    <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-4 px-6 rounded-[1.5rem] border-2 flex justify-between items-center shadow-md border-slate-100 dark:border-slate-800">
                       <div className="flex items-center gap-3 min-w-0"><CalendarDays size={18} className="text-[var(--primary-color)] shrink-0" /><h3 className="text-xs font-black uppercase tracking-[0.2em] truncate">{date.split('-').reverse().join('/')}</h3></div>
                       <span className="text-[10px] font-black text-slate-400 shrink-0">{(apps as Appointment[]).length} Atendimentos</span>
                     </div>
@@ -2282,12 +2464,12 @@ const App: React.FC = () => {
                          value={newProcName} 
                          onChange={e => setNewProcName(e.target.value)} 
                          placeholder="Novo procedimento" 
-                         className="flex-1 bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-w-0" 
+                         className="flex-1 bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border border-slate-200 outline-none min-w-0" 
                        />
                        <select 
                          value={newProcDuration} 
                          onChange={e => setNewProcDuration(e.target.value)} 
-                         className="bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-[65px] appearance-none"
+                         className="bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border border-slate-200 outline-none min-[65px] appearance-none"
                        >
                           {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
                        </select>
@@ -2301,18 +2483,18 @@ const App: React.FC = () => {
                  </div>
                  <div className="space-y-2">
                     {procedures.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-100 shadow-sm min-h-[56px]">
+                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm min-h-[56px]">
                          {editingProcIdx === i ? (
                            <div className="flex-1 flex gap-1 items-center min-w-0">
                               <input 
                                 value={editingProcName} 
                                 onChange={e => setEditingProcName(e.target.value)} 
-                                className="flex-1 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-0" 
+                                className="flex-1 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border border-slate-200 outline-none min-w-0" 
                               />
                               <select 
                                 value={editingProcDuration} 
                                 onChange={e => setEditingProcDuration(e.target.value)} 
-                                className="bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-[55px] appearance-none text-center"
+                                className="bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border border-slate-200 outline-none min-w-[55px] appearance-none text-center"
                               >
                                  {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
                               </select>
@@ -2354,12 +2536,12 @@ const App: React.FC = () => {
                          value={newSecProcName} 
                          onChange={e => setNewSecProcName(e.target.value)} 
                          placeholder="Novo adicional" 
-                         className="flex-1 bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-w-0" 
+                         className="flex-1 bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border border-slate-200 outline-none min-w-0" 
                        />
                        <select 
                          value={newSecProcDuration} 
                          onChange={e => setNewSecProcDuration(e.target.value)} 
-                         className="bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-[65px] appearance-none"
+                         className="bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border border-slate-200 outline-none min-[65px] appearance-none"
                        >
                           {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
                        </select>
@@ -2373,18 +2555,18 @@ const App: React.FC = () => {
                  </div>
                  <div className="space-y-2">
                     {secondaryProcedures.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-100 shadow-sm min-h-[56px]">
+                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm min-h-[56px]">
                          {editingSecProcIdx === i ? (
                            <div className="flex-1 flex gap-1 items-center min-w-0">
                               <input 
                                 value={editingSecProcName} 
                                 onChange={e => setEditingSecProcName(e.target.value)} 
-                                className="flex-1 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-0" 
+                                className="flex-1 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border border-slate-200 outline-none min-w-0" 
                               />
                               <select 
                                 value={editingSecProcDuration} 
                                 onChange={e => setEditingSecProcDuration(e.target.value)} 
-                                className="bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-[55px] appearance-none text-center"
+                                className="bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border border-slate-200 outline-none min-w-[55px] appearance-none text-center"
                               >
                                  {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
                               </select>
@@ -2439,7 +2621,7 @@ const App: React.FC = () => {
                          type="time"
                          value={newTime} 
                          onChange={e => setNewTime(e.target.value)} 
-                         className="flex-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl text-sm font-bold border outline-none" 
+                         className="flex-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl text-sm font-bold border border-slate-200 outline-none" 
                        />
                        <button 
                          onClick={handleAddTime} 
@@ -2458,7 +2640,7 @@ const App: React.FC = () => {
                                type="time" 
                                value={tempTimeEditValue} 
                                onChange={e => setTempTimeEditValue(e.target.value)} 
-                               className="bg-slate-50 dark:bg-slate-900 p-1 rounded-md text-xs font-bold border outline-none w-20"
+                               className="bg-slate-50 dark:bg-slate-900 p-1 rounded-md text-xs font-bold border border-slate-200 outline-none w-20"
                              />
                              <button onClick={handleUpdateStandardTime} className="p-1 text-emerald-500 hover:scale-110 transition-transform"><CheckCircle2 size={14} /></button>
                              <button onClick={() => setEditingStandardTimeIdx(null)} className="p-1 text-slate-400 hover:scale-110 transition-transform"><X size={14} /></button>
@@ -2498,7 +2680,7 @@ const App: React.FC = () => {
                          type="time"
                          value={newFreeTime} 
                          onChange={e => setNewFreeTime(e.target.value)} 
-                         className="flex-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl text-sm font-bold border outline-none" 
+                         className="flex-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl text-sm font-bold border border-slate-200 outline-none" 
                        />
                        <button 
                          onClick={handleAddFreeTime} 
@@ -2517,7 +2699,7 @@ const App: React.FC = () => {
                                type="time" 
                                value={tempTimeEditValue} 
                                onChange={e => setTempTimeEditValue(e.target.value)} 
-                               className="bg-slate-50 dark:bg-slate-900 p-1 rounded-md text-xs font-bold border outline-none w-20"
+                               className="bg-slate-50 dark:bg-slate-900 p-1 rounded-md text-xs font-bold border border-slate-200 outline-none w-20"
                              />
                              <button onClick={handleUpdateFreeTime} className="p-1 text-emerald-500 hover:scale-110 transition-transform"><CheckCircle2 size={14} /></button>
                              <button onClick={() => setEditingFreeTimeIdx(null)} className="p-1 text-slate-400 hover:scale-110 transition-transform"><X size={14} /></button>
@@ -2563,15 +2745,15 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-4 gap-2 shrink-0">
               {[
-                {l: 'Dia', v: expenseDay, s: setExpenseDay, d: DAYS_OF_MONTH}, 
+                {l: 'Dia', v: financeDay, s: setHighlightDay, d: DAYS_OF_MONTH}, 
                 {l: 'Semana', v: expenseWeek, s: setExpenseWeek, d: WEEKS}, 
-                {l: 'Mês', v: expenseMonth, s: setExpenseMonth, d: MONTHS}, 
-                {l: 'Ano', v: expenseYear, s: setExpenseYear, d: YEARS}
+                {l: 'Mês', v: historyMonth, s: setHistoryMonth, d: MONTHS}, 
+                {l: 'Ano', v: historyYear, s: setHistoryYear, d: YEARS}
               ].map((f, i) => (
                 <div key={i} className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{f.l}</label>
                   <div className="relative">
-                    <select value={f.v} onChange={(e) => f.s(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-2.5 text-[10px] font-bold outline-none appearance-none focus:ring-2 ring-red-500">
+                    <select value={f.v} onChange={(e) => f.s(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 rounded-xl p-2.5 text-[10px] font-bold outline-none appearance-none focus:ring-2 ring-red-500">
                       {f.d.map((val, idx) => <option key={idx} value={typeof val === 'string' && val === 'Todo' ? 0 : (i === 2 ? idx : (i === 3 ? val : idx))}>{val}</option>)}
                     </select>
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={10} /></div>
@@ -2584,20 +2766,20 @@ const App: React.FC = () => {
               <div className="bg-white/20 p-2.5 rounded-2xl mb-3"><ShoppingBag size={24} /></div>
               <span className="text-[9px] font-black uppercase tracking-[0.1em] opacity-80 whitespace-nowrap">Total de Despesas Mensais</span>
               <p className="text-3xl sm:text-4xl font-black tracking-tighter mt-0.5">R$ {expenseSummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-              <div className="mt-4 px-6 py-1.5 bg-black/10 rounded-full border text-[9px] font-black uppercase tracking-[0.3em]">{expenseSummary.count} Lançamentos</div>
+              <div className="mt-4 px-6 py-1.5 bg-black/10 rounded-full border border-white/20 text-[9px] font-black uppercase tracking-[0.3em]">{expenseSummary.count} Lançamentos</div>
               
               <div className="mt-4 pt-4 border-t border-white/20 w-full max-w-[200px]">
-                <span className="text-[8px] font-black uppercase tracking-[0.3em] opacity-70">Gasto Total em {expenseYear}</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] opacity-70">Gasto Total em {historyYear}</span>
                 <p className="text-lg font-black mt-0.5">R$ {annualExpenseTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
 
-            <div className="space-y-3 pt-2 border-t dark:border-slate-800 px-2">
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800 px-2">
                <div className="flex items-center gap-2 mb-1"><Plus size={14} className="text-red-500" /><h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Novo Lançamento</h4></div>
-               <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-[1.5rem] border space-y-4">
+               <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 space-y-4">
                   <div className="grid grid-cols-1 gap-3">
-                    <input value={newExpName} onChange={e => setNewExpName(e.target.value)} placeholder="Descrição da despesa" className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-[11px] font-bold shadow-sm outline-none border focus:border-red-500" />
-                    <input type="text" value={newExpValue} onChange={e => setNewExpValue(e.target.value)} placeholder="Valor R$ 0,00" className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-[11px] font-bold shadow-sm outline-none border focus:border-red-500" />
+                    <input value={newExpName} onChange={e => setNewExpName(e.target.value)} placeholder="Descrição da despesa" className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-[11px] font-bold shadow-sm outline-none border border-slate-200 dark:border-slate-700 focus:border-red-500" />
+                    <input type="text" value={newExpValue} onChange={e => setNewExpValue(e.target.value)} placeholder="Valor R$ 0,00" className="w-full bg-white dark:bg-slate-900 p-3 rounded-xl text-[11px] font-bold shadow-sm outline-none border border-slate-200 dark:border-slate-700 focus:border-red-500" />
                   </div>
 
                   <div className="space-y-1.5">
@@ -2615,7 +2797,7 @@ const App: React.FC = () => {
                </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t dark:border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t border-slate-100 dark:border-slate-800">
               {[ 
                 {l: 'Gastos Semanais', d: chartDataWeeklyExpenses, a: DAYS_ABBR}, 
                 {l: 'Gastos Mensais', d: chartDataMonthlyExpenses, a: ['S1', 'S2', 'S3', 'S4', 'S5']}
@@ -2637,11 +2819,11 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            <div className="space-y-3 pt-2 border-t dark:border-slate-800 px-2">
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800 px-2">
                <div className="flex items-center gap-2 ml-1"><List size={16} className="text-slate-400" /><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico</h4></div>
                <div className="space-y-3">
                   {(filteredExpenses || []).length > 0 ? (filteredExpenses || []).map(exp => (
-                    <div key={exp.id} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800/30 rounded-2xl border hover:border-red-200 transition-colors shadow-sm group">
+                    <div key={exp.id} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800/30 rounded-2xl border border-slate-100 hover:border-red-200 transition-colors shadow-sm group">
                         <div className="flex flex-col min-w-0">
                           <span className="text-xs font-bold truncate group-hover:text-red-600 transition-colors">{exp.name}</span>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -2656,7 +2838,7 @@ const App: React.FC = () => {
                         </div>
                     </div>
                   )) : (
-                    <div className="py-16 text-center border-2 border-dashed rounded-[1.5rem] text-slate-300 uppercase text-[10px] font-bold tracking-widest">Nenhuma despesa</div>
+                    <div className="py-16 text-center border-2 border-dashed border-slate-100 rounded-[1.5rem] text-slate-300 uppercase text-[10px] font-bold tracking-widest">Nenhuma despesa</div>
                   )}
                </div>
             </div>
@@ -2672,11 +2854,11 @@ const App: React.FC = () => {
                <button onClick={() => setIsFinanceOpen(false)} className="p-2 text-slate-400"><X size={24} /></button>
             </div>
             <div className="grid grid-cols-4 gap-2 shrink-0">
-              {[{l: 'Day', v: financeDay, s: setFinanceDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: financeWeek, s: setFinanceWeek, d: WEEKS}, {l: 'Mês', v: financeMonth, s: setFinanceMonth, d: MONTHS}, {l: 'Ano', v: financeYear, s: setFinanceYear, d: YEARS}].map((f, i) => (
+              {[{l: 'Day', v: financeDay, s: setFinanceDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: financeWeek, s: setFinanceWeek, d: WEEKS}, {l: 'Mês', v: financeMonth, s: setHistoryMonth, d: MONTHS}, {l: 'Ano', v: financeYear, s: setHistoryYear, d: YEARS}].map((f, i) => (
                 <div key={i} className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{f.l}</label>
                   <div className="relative">
-                    <select value={f.v} onChange={(e) => f.s(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-2.5 text-[10px] font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)]">
+                    <select value={f.v} onChange={(e) => f.s(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 rounded-xl p-2.5 text-[10px] font-bold outline-none appearance-none focus:ring-2 ring-[var(--primary-color)]">
                       {f.d.map((val, idx) => <option key={idx} value={typeof val === 'string' && val === 'Todo' ? 0 : (i === 2 ? idx : (i === 3 ? val : idx))}>{val}</option>)}
                     </select>
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronDown size={10} /></div>
@@ -2689,7 +2871,7 @@ const App: React.FC = () => {
               <div className="bg-white/20 p-2.5 rounded-2xl mb-3"><Banknote size={24} /></div>
               <span className="text-[9px] font-black uppercase tracking-[0.1em] opacity-80 whitespace-nowrap">Faturamento Mensal</span>
               <p className="text-3xl sm:text-4xl font-black tracking-tighter mt-0.5">R$ {monthlySummary.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-              <div className="mt-4 px-6 py-1.5 bg-black/10 rounded-full border text-[9px] font-black uppercase tracking-[0.3em]">{monthlySummary.count} Atendimentos</div>
+              <div className="mt-4 px-6 py-1.5 bg-black/10 rounded-full border border-white/20 text-[9px] font-black uppercase tracking-[0.3em]">{monthlySummary.count} Atendimentos</div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -2706,11 +2888,11 @@ const App: React.FC = () => {
             </div>
 
             {auth.role === 'master' && (
-              <div className="pt-6 border-t dark:border-slate-800 space-y-4 px-2">
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4 px-2">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <TrendingUp size={16} className="text-[var(--primary-color)]" />
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faturamento Anual {financeYear}</h4>
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faturamento Anual {historyYear}</h4>
                     </div>
                     {auth.role === 'master' && (
                       <button 
@@ -2735,7 +2917,7 @@ const App: React.FC = () => {
                             <input 
                               value={tempAnnualLimit} 
                               onChange={e => setTempAnnualLimit(e.target.value)} 
-                              className="w-24 bg-white dark:bg-slate-900 border p-1 px-2 rounded-lg text-xs font-bold outline-none" 
+                              className="w-24 bg-white dark:bg-slate-900 border border-slate-200 p-1 px-2 rounded-lg text-xs font-bold outline-none" 
                               placeholder="Nova meta"
                               autoFocus
                             />
@@ -2774,7 +2956,7 @@ const App: React.FC = () => {
       {sharingAppointment && <ShareModal appointment={sharingAppointment} onClose={() => setSharingAppointment(null)} isManualShare={isManualShare} />}
       {appointmentToDelete && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-sm p-10 text-center space-y-8">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-sm p-10 text-center space-y-8 border border-slate-100 dark:border-slate-800">
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto shadow-sm"><AlertTriangle size={40} /></div>
             <div><h3 className="text-2xl font-black uppercase tracking-tight">Excluir?</h3><p className="text-sm text-slate-400 uppercase font-bold tracking-widest mt-3">Deseja mesmo remover este agendamento?</p></div>
             <div className="flex gap-4"><button onClick={() => setAppointmentToDelete(null)} className="flex-1 py-5 bg-red-500 text-white rounded-2xl font-bold uppercase text-xs tracking-widest">Não</button><button onClick={handleDeleteAppointment} className="flex-1 py-5 bg-emerald-500 text-white rounded-2xl font-bold uppercase text-xs tracking-widest">Sim</button></div>
