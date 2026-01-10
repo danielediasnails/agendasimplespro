@@ -344,24 +344,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // FUNÇÃO DE SOM NATIVA (PING)
-  const playPingSound = () => {
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Tom harmônico A5
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.05);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.5);
-    } catch (e) {}
-  };
-
   // SISTEMA DE LEMBRETE INTERNO (UI BANNER)
   useEffect(() => {
     let interval: number;
@@ -377,17 +359,40 @@ const App: React.FC = () => {
           
           // Dispara o aviso interno (UI Banner)
           setIsReminderBannerVisible(true);
-          playPingSound();
+          
+          // Dispara Push nativa se houver permissão
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification('Agenda Simples', { 
+              body: '⏰ Hora de confirmar as clientes de amanhã!',
+              icon: studioLogoUrl || '/icon-512.png',
+              tag: 'confirm-reminder'
+            });
+          }
         }
       }, 15000); // Checa a cada 15 segundos
     }
     return () => clearInterval(interval);
-  }, [isReminderActive, reminderTime, auth]);
+  }, [isReminderActive, reminderTime, auth, studioLogoUrl]);
 
   useEffect(() => {
     localStorage.setItem('studio_reminder_time', reminderTime);
     localStorage.setItem('studio_reminder_active', String(isReminderActive));
   }, [reminderTime, isReminderActive]);
+
+  const handleToggleReminder = async () => {
+    const nextState = !isReminderActive;
+    setIsReminderActive(nextState);
+    
+    if (nextState && "Notification" in window) {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        new Notification('Agenda Simples', { 
+          body: '🚀 Lembretes ativados! O sistema lhe avisará no horário configurado.',
+          icon: studioLogoUrl || '/icon-512.png'
+        });
+      }
+    }
+  };
 
   const handleInstallClick = async () => {
     console.log('Botão clicado');
@@ -1239,16 +1244,16 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-inherit text-inherit pb-24 transition-colors duration-500">
-      {/* BANNER DE LEMBRETE INTERNO ESTILO WHATSAPP */}
+      {/* BANNER DE LEMBRETE INTERNO ESTILO WHATSAPP PASTEL ELEGANTE */}
       {isReminderBannerVisible && (
-        <div className="fixed top-0 left-0 right-0 z-[1000] bg-[#25D366] text-white p-4 shadow-2xl flex items-center justify-between animate-in slide-in-from-top duration-500 border-b border-white/10">
+        <div className="fixed top-0 left-0 right-0 z-[1000] bg-[#DCF8C6] text-[#000000] p-4 shadow-2xl flex items-center justify-between animate-in slide-in-from-top duration-500 border-b border-black/5">
           <div className="flex items-center gap-3 ml-4">
-            <MessageCircle className="animate-pulse" size={20} />
-            <span className="font-black uppercase tracking-tighter text-sm sm:text-base">⏰ HORA DE CONFIRMAR AS CLIENTES!</span>
+            <MessageCircle className="animate-pulse text-emerald-600" size={20} />
+            <span className="font-normal uppercase tracking-tight text-sm sm:text-base">⏰ HORA DE CONFIRMAR AS CLIENTES!</span>
           </div>
           <button 
             onClick={() => setIsReminderBannerVisible(false)} 
-            className="p-2 hover:bg-black/10 rounded-full transition-all mr-4"
+            className="p-2 hover:bg-black/5 rounded-full transition-all mr-4 text-slate-600"
           >
             <X size={24} />
           </button>
@@ -1693,7 +1698,7 @@ const App: React.FC = () => {
                 </div>
 
                 {blockedTimes[selectedDate] && blockedTimes[selectedDate].length > 0 && (
-                   <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                   <div className="space-y-4 pt-4 border-t dark:border-slate-800">
                       <p className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-1">Remover Bloqueios de Hoje:</p>
                       <div className="flex flex-wrap gap-2">
                         {blockedTimes[selectedDate].map(time => (
@@ -1712,7 +1717,7 @@ const App: React.FC = () => {
                 )}
              </div>
 
-             <div className="p-8 border-t border-slate-100 dark:border-slate-800 flex gap-4">
+             <div className="p-8 border-t dark:border-slate-800 flex gap-4">
                 <button onClick={() => { setIsTimeBlockModalOpen(false); setSelectedTimesForBlocking([]); }} className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl font-bold uppercase text-xs tracking-widest shadow-sm active:scale-95 transition-all">Cancelar</button>
                 <button 
                   onClick={() => {
@@ -1914,7 +1919,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="pt-4 border-t dark:border-slate-800">
                <button 
                  onClick={() => { setIsSlotsModalOpen(false); setIsFreeTimesExpanded(false); setIsFormOpen(true); }}
                  className="w-full gold-gradient text-white py-4 rounded-2xl font-bold uppercase text-[10px] tracking-[0.3em] shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all"
@@ -1956,7 +1961,7 @@ const App: React.FC = () => {
 
       {isCropModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-[4px] animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-lg shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                <div>
                  <h2 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-tight">Ajustar Foto da Logo</h2>
@@ -1972,7 +1977,7 @@ const App: React.FC = () => {
              <div className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-4">
                 <button onClick={() => setIsCropModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-xl font-bold uppercase text-xs tracking-widest active:scale-95 transition-all">Cancelar</button>
                 <button onClick={handleSaveCrop} className="flex-1 py-4 gold-gradient text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
-                  <Save size={18} />
+                  <Plus size={18} />
                   <span>Salvar Logo</span>
                 </button>
              </div>
@@ -2054,7 +2059,7 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-3 w-full sm:w-auto pt-4 sm:pt-0">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">Ligar Lembrete</span>
                     <button 
-                      onClick={() => setIsReminderActive(!isReminderActive)}
+                      onClick={handleToggleReminder}
                       className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${isReminderActive ? 'bg-emerald-500 shadow-md' : 'bg-slate-200 dark:bg-slate-700'}`}
                     >
                       <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${isReminderActive ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -2804,7 +2809,7 @@ const App: React.FC = () => {
               ].map((c, i) => (
                 <div key={i} className="space-y-3">
                   <div className="flex items-center gap-2 ml-1"><BarChart3 size={16} className="text-red-500" /><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.l}</h4></div>
-                  <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-100 space-y-3">
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 space-y-3">
                     {c.d.map((val, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <span className="w-8 text-[8px] font-black text-slate-400 uppercase">{c.a[idx]}</span>
