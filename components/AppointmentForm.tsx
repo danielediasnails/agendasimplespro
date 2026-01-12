@@ -65,6 +65,8 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
 
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
   useEffect(() => {
     if (editingData) {
       setDate(editingData.date);
@@ -141,6 +143,11 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
       return;
     }
 
+    if (date < todayStr && !editingData) {
+      alert("Não é possível realizar agendamentos em datas retroativas.");
+      return;
+    }
+
     onSubmit({
       date,
       clientName: clientName || 'Sem Nome',
@@ -188,7 +195,13 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Data</label>
               <div className="relative">
                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all min-w-0" />
+                <input 
+                  type="date" 
+                  value={date} 
+                  min={editingData ? undefined : todayStr}
+                  onChange={(e) => setDate(e.target.value)} 
+                  className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl p-4 pl-12 text-sm font-bold outline-none focus:ring-2 ring-[var(--primary-color)] transition-all min-w-0" 
+                />
               </div>
             </div>
             <div className="space-y-2">
