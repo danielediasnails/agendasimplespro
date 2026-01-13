@@ -363,7 +363,7 @@ const App: React.FC = () => {
     }, 30000); // Checa a cada 30 segundos
 
     return () => clearInterval(interval);
-  }, [notifEnabled, notifTime, lastNotifiedDay, todayStr, auth, studioLogoUrl]);
+  }, [notifEnabled, notifTime, lastNotifiedDay, todayStr, auth]);
 
   useEffect(() => {
     localStorage.setItem('studio_values_visible', JSON.stringify(isQuickValuesVisible));
@@ -398,9 +398,6 @@ const App: React.FC = () => {
   }, []);
 
   const handleInstallClick = async () => {
-    console.log('Botão clicado');
-    window.alert('Botão acionado!');
-    
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     
     if (isIOS) {
@@ -575,6 +572,29 @@ const App: React.FC = () => {
     }
     return base.filter(app => app.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time));
   }, [appointments, selectedDate, searchQuery, auth]);
+
+  const groupedHistory = useMemo(() => {
+    let base = appointments || [];
+    const q = historySearchQuery.toLowerCase().trim();
+
+    const filtered = base.filter(app => {
+      const d = new Date(app.date + 'T12:00:00');
+      const matchesDate = d.getMonth() === historyMonth && d.getFullYear() === historyYear;
+      const matchesPartner = historyPartnerFilter === 'all' || app.partnerName === historyPartnerFilter;
+      const matchesQuery = !q || 
+        (app.clientName && app.clientName.toLowerCase().includes(q)) || 
+        (app.procedure && app.procedure.toLowerCase().includes(q));
+      
+      return matchesDate && matchesPartner && matchesQuery;
+    }).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+    const groups: Record<string, Appointment[]> = {};
+    filtered.forEach(app => {
+      if (!groups[app.date]) groups[app.date] = [];
+      groups[app.date].push(app);
+    });
+    return groups;
+  }, [appointments, historySearchQuery, historyPartnerFilter, historyMonth, historyYear]);
 
   const tomorrowAppointments = useMemo(() => {
     let base = appointments || [];
@@ -1167,31 +1187,6 @@ const App: React.FC = () => {
     const text = encodeURIComponent(message);
     window.open(`https://wa.me/${phone.startsWith('55') ? phone : `55${phone}`}?text=${text}`, '_blank');
   };
-
-  const groupedHistory = useMemo(() => {
-    let base = appointments || [];
-    if (auth.role === 'partner') base = base.filter(app => app.partnerName === auth.username);
-    const filtered = base.filter(app => {
-      const d = new Date(app.date + 'T12:00:00');
-      if (d.getMonth() !== historyMonth || d.getFullYear() !== historyYear) return false;
-      if (historyPartnerFilter !== 'all') {
-        if (historyPartnerFilter === 'Daniele Dias') return !app.partnerName || app.partnerName === 'Daniele Dias';
-        return app.partnerName === historyPartnerFilter;
-      }
-      if (historySearchQuery.trim()) {
-        const q = historySearchQuery.toLowerCase();
-        return app.clientName.toLowerCase().includes(q) || app.whatsapp.includes(q);
-      }
-      return true;
-    }).sort((a, b) => b.date.localeCompare(a.date) || a.time.localeCompare(b.time));
-
-    const groups: Record<string, Appointment[]> = {};
-    filtered.forEach(app => {
-      if (!groups[app.date]) groups[app.date] = [];
-      groups[app.date].push(app);
-    });
-    return groups;
-  }, [appointments, historyMonth, historyYear, historyPartnerFilter, historySearchQuery, auth]);
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center gap-6 animate-in fade-in duration-700">
@@ -2539,7 +2534,7 @@ const App: React.FC = () => {
              </div>
 
              <div className="space-y-12">
-                {Object.keys(groupedHistory).length > 0 ? Object.entries(groupedHistory).map(([date, apps]) => (
+                {Object.keys(groupedHistory).length > 0 ? Object.entries(groupedHistory).sort((a, b) => a[0].localeCompare(b[0])).map(([date, apps]) => (
                   <div key={date} className="space-y-6">
                     <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur py-4 px-6 rounded-[1.5rem] border-2 flex justify-between items-center shadow-md">
                       <div className="flex items-center gap-3 min-w-0"><CalendarDays size={18} className="text-[var(--primary-color)] shrink-0" /><h3 className="text-xs font-black uppercase tracking-[0.2em] truncate">{date.split('-').reverse().join('/')}</h3></div>
@@ -2829,7 +2824,7 @@ const App: React.FC = () => {
                                  <Edit2 size={14} />
                                </button>
                                <button 
-                                 onClick={() => handleDeleteFreeTime(t)} 
+                                 onClick={() => handleDeleteTime(t)} 
                                  className="p-1 text-slate-300 hover:text-red-500 transition-colors"
                                >
                                  <X size={14} />
@@ -2913,7 +2908,7 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t dark:border-slate-800">
               {[ 
-                {l: 'Gastos Diários', d: chartDataWeeklyExpenses, a: DAYS_ABBR}, 
+                {l: 'GastoS Diários', d: chartDataWeeklyExpenses, a: DAYS_ABBR}, 
                 {l: 'Gastos Semanais', d: chartDataMonthlyExpenses, a: ['S1', 'S2', 'S3', 'S4', 'S5']}
               ].map((c, i) => (
                 <div key={i} className="space-y-3">
