@@ -2913,8 +2913,8 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t dark:border-slate-800">
               {[ 
-                {l: 'Gastos Semanais', d: chartDataWeeklyExpenses, a: DAYS_ABBR}, 
-                {l: 'Gastos Mensais', d: chartDataMonthlyExpenses, a: ['S1', 'S2', 'S3', 'S4', 'S5']}
+                {l: 'Gastos Diários', d: chartDataWeeklyExpenses, a: DAYS_ABBR}, 
+                {l: 'Gastos Semanais', d: chartDataMonthlyExpenses, a: ['S1', 'S2', 'S3', 'S4', 'S5']}
               ].map((c, i) => (
                 <div key={i} className="space-y-3">
                   <div className="flex items-center gap-2 ml-1"><BarChart3 size={16} className="text-red-500" /><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.l}</h4></div>
