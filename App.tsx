@@ -2963,7 +2963,7 @@ const App: React.FC = () => {
                <button onClick={() => setIsFinanceOpen(false)} className="p-2 text-slate-400"><X size={24} /></button>
             </div>
             <div className="grid grid-cols-4 gap-2 shrink-0">
-              {[{l: 'Day', v: financeDay, s: setFinanceDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: financeWeek, s: setFinanceWeek, d: WEEKS}, {l: 'Mês', v: financeMonth, s: setFinanceMonth, d: MONTHS}, {l: 'Ano', v: financeYear, s: setFinanceYear, d: YEARS}].map((f, i) => (
+              {[{l: 'Dia', v: financeDay, s: setFinanceDay, d: DAYS_OF_MONTH}, {l: 'Semana', v: financeWeek, s: setFinanceWeek, d: WEEKS}, {l: 'Mês', v: financeMonth, s: setFinanceMonth, d: MONTHS}, {l: 'Ano', v: financeYear, s: setFinanceYear, d: YEARS}].map((f, i) => (
                 <div key={i} className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{f.l}</label>
                   <div className="relative">
