@@ -7,14 +7,14 @@ import {
   CalendarDays, Loader2, LogOut, Briefcase, 
   Edit2, Search, List, Menu, BarChart3, 
   Scissors, Sparkles, Flower2, Crown, Heart, Fingerprint, Star, Brush, Gem, Smile,
-  Coffee, Zap, Paintbrush, Hand, Eye, EyeOff, Droplets, Feather, Wand2, SprayCan, Diamond,
-  Clover, Infinity, Waves, Shapes, PersonStanding, Footprints, Dna, Award,
+  Coffee, Zap, Paintbrush, Hand, Eye, EyeOff, Droplets, Feather, Wand2, Brush as BrushIcon, Scissors as ScissorsIcon,
+  SprayCan, Diamond, Clover, Infinity, Waves, Shapes, PersonStanding, Footprints, Dna, Award,
   User, UserRound, Contact, SmilePlus, Lock, KeyRound, ArrowRight, Trash2, ChevronDown, ChevronUp,
   UserSearch, Sparkle, Pipette, Upload, Save, Receipt, Wallet, CalendarRange, Target, ShieldCheck,
   TrendingDown, Calendar as LucideCalendar, Hash, LayoutGrid, Banknote, Phone, History as HistoryIcon, UserPlus, HardHat, Key,
   AlertCircle, TrendingUp as TrendingUpIcon, Percent, AlertTriangle, Pipette as PipetteIcon,
   ShoppingBag, GripVertical, FileUp, Sun, Moon, Shield, UserCog, UserMinus, Unlock, ShieldAlert, Image as ImageIcon,
-  CalendarOff, TimerOff, Smartphone, Send, Bell, BellRing, BellOff
+  CalendarOff, TimerOff, Smartphone, Send, Bell, BellRing, BellOff, RefreshCw
 } from 'lucide-react';
 import Cropper from 'cropperjs';
 import { Appointment, Client, PaymentMethod, Partner, Expense, Procedure } from './types';
@@ -273,17 +273,25 @@ const App: React.FC = () => {
   const [isQuickValuesVisible, setIsQuickValuesVisible] = useState(false);
 
   const [newProcName, setNewProcName] = useState('');
-  const [newProcDuration, setNewProcDuration] = useState('1h');
+  const [newProcDuration, setNewProcDuration] = useState('');
+  const [newProcDurability, setNewProcDurability] = useState('');
+
   const [newSecProcName, setNewSecProcName] = useState('');
-  const [newSecProcDuration, setNewSecProcDuration] = useState('1h');
+  const [newSecProcDuration, setNewSecProcDuration] = useState('');
+  const [newSecProcDurability, setNewSecProcDurability] = useState('');
 
   const [editingProcIdx, setEditingProcIdx] = useState<number | null>(null);
   const [editingProcName, setEditingProcName] = useState('');
   const [editingProcDuration, setEditingProcDuration] = useState('');
+  const [editingProcDurability, setEditingProcDurability] = useState('');
   
   const [editingSecProcIdx, setEditingSecProcIdx] = useState<number | null>(null);
   const [editingSecProcName, setEditingSecProcName] = useState('');
   const [editingSecProcDuration, setEditingSecProcDuration] = useState('');
+  const [editingSecProcDurability, setEditingSecProcDurability] = useState('');
+
+  // Drag and Drop State
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
   const [newTime, setNewTime] = useState('08:00');
   const [newFreeTime, setNewFreeTime] = useState('08:00');
@@ -811,6 +819,15 @@ const App: React.FC = () => {
     setIsFormOpen(false); setEditingAppointment(null); setPreselectedTime(null);
   };
 
+  const handleUpdateTotal = (id: string, newTotal: number) => {
+    const app = appointments.find(a => a.id === id);
+    if (!app) return;
+    const updatedApp = { ...app, totalValue: newTotal };
+    google.script.run.withSuccessHandler((saved: Appointment) => {
+      setAppointments(prev => prev.map(a => a.id === id ? saved : a));
+    }).saveAppointment(updatedApp);
+  };
+
   const persistSettings = (opts: any = {}) => {
     const settings = { 
       studioName, studioSubtitle, studioIcon, themeId: currentTheme.id, themeMode, customColor,
@@ -921,9 +938,11 @@ const App: React.FC = () => {
 
   const handleAddProcedure = () => {
     if (!newProcName) return;
-    const updated = [...procedures, { name: newProcName, duration: newProcDuration }];
+    const updated = [...procedures, { name: newProcName, duration: newProcDuration, durabilityDays: newProcDurability ? parseInt(newProcDurability) : undefined }];
     setProcedures(updated);
     setNewProcName('');
+    setNewProcDuration('');
+    setNewProcDurability('');
     persistSettings({ updatedProcedures: updated });
   };
 
@@ -936,7 +955,11 @@ const App: React.FC = () => {
   const handleUpdateProcedure = () => {
     if (editingProcIdx === null) return;
     const updated = [...procedures];
-    updated[editingProcIdx] = { name: editingProcName, duration: editingProcDuration };
+    updated[editingProcIdx] = { 
+      name: editingProcName, 
+      duration: editingProcDuration, 
+      durabilityDays: editingProcDurability ? parseInt(editingProcDurability) : undefined 
+    };
     setProcedures(updated);
     setEditingProcIdx(null);
     persistSettings({ updatedProcedures: updated });
@@ -944,9 +967,11 @@ const App: React.FC = () => {
 
   const handleAddSecProcedure = () => {
     if (!newSecProcName) return;
-    const updated = [...secondaryProcedures, { name: newSecProcName, duration: newSecProcDuration }];
+    const updated = [...secondaryProcedures, { name: newSecProcName, duration: newSecProcDuration, durabilityDays: newSecProcDurability ? parseInt(newSecProcDurability) : undefined }];
     setSecondaryProcedures(updated);
     setNewSecProcName('');
+    setNewSecProcDuration('');
+    setNewSecProcDurability('');
     persistSettings({ updatedSecProcedures: updated });
   };
 
@@ -959,10 +984,44 @@ const App: React.FC = () => {
   const handleUpdateSecProcedure = () => {
     if (editingSecProcIdx === null) return;
     const updated = [...secondaryProcedures];
-    updated[editingSecProcIdx] = { name: editingSecProcName, duration: editingSecProcDuration };
+    updated[editingSecProcIdx] = { 
+      name: editingSecProcName, 
+      duration: editingSecProcDuration, 
+      durabilityDays: editingSecProcDurability ? parseInt(editingSecProcDurability) : undefined 
+    };
     setSecondaryProcedures(updated);
     setEditingSecProcIdx(null);
     persistSettings({ updatedSecProcedures: updated });
+  };
+
+  // Drag and Drop Logic
+  const handleDragStart = (idx: number) => {
+    setDraggedIdx(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number, listType: 'primary' | 'secondary') => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === idx) return;
+
+    const currentList = listType === 'primary' ? [...procedures] : [...secondaryProcedures];
+    const draggedItem = currentList[draggedIdx];
+    currentList.splice(draggedIdx, 1);
+    currentList.splice(idx, 0, draggedItem);
+
+    if (listType === 'primary') {
+      setProcedures(currentList);
+    } else {
+      setSecondaryProcedures(currentList);
+    }
+    setDraggedIdx(idx);
+  };
+
+  const handleDragEnd = (listType: 'primary' | 'secondary') => {
+    setDraggedIdx(null);
+    persistSettings({
+      updatedProcedures: listType === 'primary' ? procedures : undefined,
+      updatedSecProcedures: listType === 'secondary' ? secondaryProcedures : undefined
+    });
   };
 
   const handleAddTime = () => {
@@ -1344,7 +1403,7 @@ const App: React.FC = () => {
             <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Profissional</span>
             <h2 className="text-3xl font-black gold-text-gradient uppercase tracking-tight">{auth.username}</h2>
           </div>
-          <div className="w-full max-w-lg mx-auto flex items-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-[1.25rem] border border-slate-200/60 dark:border-slate-800/60 shadow-lg overflow-hidden flex-nowrap">
+          <div className="w-full max-lg mx-auto flex items-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-[1.25rem] border border-slate-200/60 dark:border-slate-800/60 shadow-lg overflow-hidden flex-nowrap">
             <div className="flex items-center gap-1 p-1.5 bg-slate-50 dark:bg-slate-800/40 border-r shrink-0">
               <div className="relative">
                 <select value={quickReportMonth} onChange={(e) => setQuickReportMonth(parseInt(e.target.value))} className="bg-white dark:bg-slate-800 text-[10px] font-black uppercase tracking-tighter h-8 pl-1.5 pr-4 rounded-lg appearance-none border-none outline-none cursor-pointer min-w-[45px]">
@@ -1472,7 +1531,7 @@ const App: React.FC = () => {
                             ? 'gold-gradient text-white border-transparent shadow-md scale-105 z-10' 
                             : isRetroactiveBlocked 
                               ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-300 dark:text-slate-600 opacity-50 cursor-not-allowed grayscale-[0.8]'
-                              : 'bg-white dark:bg-slate-900 border-slate-50 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-[var(--primary-color)]/30'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-[var(--primary-color)]/30'
                         }`}
                         disabled={isRetroactiveBlocked && !calIsSelected}
                       >
@@ -1586,9 +1645,23 @@ const App: React.FC = () => {
         )}
 
         <div className="space-y-6">
-          {(filteredAppointments || []).length > 0 ? (filteredAppointments || []).map(app => (
-            <AgendaItem key={app.id} appointment={app} onDelete={() => auth.role === 'master' && confirmDeleteAppointment(app.id)} onEdit={() => auth.role === 'master' && (setEditingAppointment(app), setIsFormOpen(true))} onShare={() => { setIsManualShare(true); setSharingAppointment(app); }} isEmployeeView={auth.role === 'partner'} commissionPercentage={auth.role === 'partner' ? currentPartnerCommission : ((partners || []).find(p => p.name === app.partnerName)?.commission || 100)} daysSinceLastVisit={null} />
-          )) : <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-20 text-center text-slate-300 border-2 border-dashed border-slate-100 font-bold uppercase text-sm tracking-widest">Nenhum registro para esta data.</div>}
+          {(filteredAppointments || []).length > 0 ? (filteredAppointments || []).map(app => {
+            const procedureObj = [...procedures, ...secondaryProcedures].find(p => p.name === app.procedure);
+            return (
+              <AgendaItem 
+                key={app.id} 
+                appointment={app} 
+                procedureDurability={procedureObj?.durabilityDays}
+                onDelete={() => auth.role === 'master' && confirmDeleteAppointment(app.id)} 
+                onEdit={() => auth.role === 'master' && (setEditingAppointment(app), setIsFormOpen(true))} 
+                onShare={() => { setIsManualShare(true); setSharingAppointment(app); }} 
+                onUpdateTotal={handleUpdateTotal} 
+                isEmployeeView={auth.role === 'partner'} 
+                commissionPercentage={auth.role === 'partner' ? currentPartnerCommission : ((partners || []).find(p => p.name === app.partnerName)?.commission || 100)} 
+                daysSinceLastVisit={null} 
+              />
+            );
+          }) : <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-20 text-center text-slate-300 border-2 border-dashed border-slate-100 font-bold uppercase text-sm tracking-widest">Nenhum registro para esta data.</div>}
         </div>
       </main>
 
@@ -2540,7 +2613,10 @@ const App: React.FC = () => {
                       <div className="flex items-center gap-3 min-w-0"><CalendarDays size={18} className="text-[var(--primary-color)] shrink-0" /><h3 className="text-xs font-black uppercase tracking-[0.2em] truncate">{date.split('-').reverse().join('/')}</h3></div>
                       <span className="text-[10px] font-black text-slate-400 shrink-0">{(apps as Appointment[]).length} Atendimentos</span>
                     </div>
-                    <div className="grid grid-cols-1 gap-6">{(apps as Appointment[]).map(app => <AgendaItem key={app.id} appointment={app} isHistory onDelete={() => confirmDeleteAppointment(app.id)} onEdit={() => { setEditingAppointment(app); setIsFormOpen(true); setIsHistoryOpen(false); }} daysSinceLastVisit={null} />)}</div>
+                    <div className="grid grid-cols-1 gap-6">{(apps as Appointment[]).map(app => {
+                      const proc = [...procedures, ...secondaryProcedures].find(p => p.name === app.procedure);
+                      return <AgendaItem key={app.id} appointment={app} procedureDurability={proc?.durabilityDays} isHistory onDelete={() => confirmDeleteAppointment(app.id)} onEdit={() => { setEditingAppointment(app); setIsFormOpen(true); setIsHistoryOpen(false); }} onUpdateTotal={handleUpdateTotal} daysSinceLastVisit={null} />;
+                    })}</div>
                   </div>
                 )) : (
                   <div className="flex flex-col items-center justify-center py-20 text-slate-300">
@@ -2567,67 +2643,111 @@ const App: React.FC = () => {
                     <Sparkles size={18} className="text-[var(--primary-color)]" />
                     <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Principais</h3>
                  </div>
-                 <div className="bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                    <div className="flex gap-1.5 items-center">
+                 <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                    <div className="flex flex-col gap-4">
                        <input 
                          value={newProcName} 
                          onChange={e => setNewProcName(e.target.value)} 
                          placeholder="Novo procedimento" 
-                         className="flex-1 bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-w-0" 
+                         className="w-full bg-white dark:bg-slate-900 p-2.5 rounded-xl text-[10px] font-bold border outline-none" 
                        />
-                       <select 
-                         value={newProcDuration} 
-                         onChange={e => setNewProcDuration(e.target.value)} 
-                         className="bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-[65px] appearance-none"
-                       >
-                          {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                       </select>
-                       <button 
-                         onClick={handleAddProcedure} 
-                         className="p-2 gold-gradient text-white rounded-xl active:scale-95 transition-all shrink-0"
-                       >
-                         <Plus size={16} />
-                       </button>
+                       <div className="flex gap-2 items-center">
+                          <div className="flex-1 relative min-w-0">
+                             <Clock size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                             <input 
+                               value={newProcDuration} 
+                               onChange={e => setNewProcDuration(e.target.value)} 
+                               placeholder="Tempo" 
+                               className="w-full bg-white dark:bg-slate-900 p-2.5 pl-8 rounded-xl text-[10px] font-bold border outline-none" 
+                             />
+                          </div>
+                          <div className="flex-1 relative min-w-0">
+                             <RefreshCw size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                             <input 
+                               type="number"
+                               value={newProcDurability} 
+                               onChange={e => setNewProcDurability(e.target.value)} 
+                               placeholder="Durabilidade" 
+                               className="w-full bg-white dark:bg-slate-900 p-2.5 pl-8 rounded-xl text-[10px] font-bold border outline-none" 
+                             />
+                          </div>
+                          <button 
+                            onClick={handleAddProcedure} 
+                            className="p-2.5 gold-gradient text-white rounded-xl active:scale-95 transition-all shrink-0"
+                          >
+                            <Plus size={20} />
+                          </button>
+                       </div>
                     </div>
                  </div>
                  <div className="space-y-2">
                     {procedures.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-100 shadow-sm min-h-[56px]">
+                      <div 
+                        key={i} 
+                        draggable 
+                        onDragStart={() => handleDragStart(i)}
+                        onDragOver={(e) => handleDragOver(e, i, 'primary')}
+                        onDragEnd={() => handleDragEnd('primary')}
+                        className={`flex flex-col p-3 bg-white dark:bg-slate-800/40 rounded-xl border shadow-sm space-y-2 overflow-hidden transition-all ${draggedIdx === i ? 'opacity-40 scale-95 border-[var(--primary-color)]' : 'border-slate-100 dark:border-slate-800'}`}
+                      >
                          {editingProcIdx === i ? (
-                           <div className="flex-1 flex gap-1 items-center min-w-0">
+                           <div className="space-y-2">
                               <input 
                                 value={editingProcName} 
                                 onChange={e => setEditingProcName(e.target.value)} 
-                                className="flex-1 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-0" 
+                                className="w-full bg-slate-50 dark:bg-slate-900 p-2 rounded-lg text-[10px] font-bold border outline-none" 
                               />
-                              <select 
-                                value={editingProcDuration} 
-                                onChange={e => setEditingProcDuration(e.target.value)} 
-                                className="bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-[55px] appearance-none text-center"
-                              >
-                                 {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                              </select>
-                              <button onClick={handleUpdateProcedure} className="p-1.5 bg-emerald-500 text-white rounded-lg shrink-0"><CheckCircle2 size={14} /></button>
-                              <button onClick={() => setEditingProcIdx(null)} className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded-lg shrink-0"><X size={14} /></button>
+                              <div className="flex gap-2 items-center">
+                                 <input 
+                                   value={editingProcDuration} 
+                                   onChange={e => setEditingProcDuration(e.target.value)} 
+                                   placeholder="Tempo"
+                                   className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg text-[10px] font-bold border outline-none" 
+                                 />
+                                 <input 
+                                   type="number"
+                                   value={editingProcDurability} 
+                                   onChange={e => setEditingProcDurability(e.target.value)} 
+                                   placeholder="Durabilidade"
+                                   className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg text-[10px] font-bold border outline-none" 
+                                 />
+                                 <button onClick={handleUpdateProcedure} className="p-2 bg-emerald-500 text-white rounded-lg shrink-0"><CheckCircle2 size={16} /></button>
+                                 <button onClick={() => setEditingProcIdx(null)} className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded-lg shrink-0"><X size={16} /></button>
+                              </div>
                            </div>
                          ) : (
-                           <>
-                             <div className="flex flex-col min-w-0"><span className="text-xs font-bold truncate">{p.name}</span><span className="text-[10px] text-slate-400 uppercase font-black">{formatDurationDisplay(p.duration)}</span></div>
+                           <div className="flex items-center gap-3">
+                             <div className="cursor-grab active:cursor-grabbing p-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                               <GripVertical size={20} className="text-slate-300" />
+                             </div>
+                             
+                             <div className="flex-1 min-w-0">
+                               <span className="text-xs font-bold truncate block">{p.name}</span>
+                               <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[9px] text-slate-400 uppercase font-black">{p.duration || 'Tempo'}</span>
+                                  {p.durabilityDays && (
+                                    <div className="flex items-center gap-1.5">
+                                       <span className="text-[9px] text-slate-300 dark:text-slate-700 font-bold">-</span>
+                                       <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{p.durabilityDays} dias</span>
+                                    </div>
+                                  )}
+                               </div>
+                             </div>
                              <div className="flex items-center gap-0.5 shrink-0">
                                <button 
-                                 onClick={() => { setEditingProcIdx(i); setEditingProcName(p.name); setEditingProcDuration(p.duration); }} 
-                                 className="p-1.5 text-slate-300 hover:text-[var(--primary-color)] transition-colors"
+                                 onClick={() => { setEditingProcIdx(i); setEditingProcName(p.name); setEditingProcDuration(p.duration); setEditingProcDurability(p.durabilityDays?.toString() || ''); }} 
+                                 className="p-2 text-slate-400 hover:text-[var(--primary-color)] hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
                                >
-                                 <Edit2 size={15} />
+                                 <Edit2 size={16} />
                                </button>
                                <button 
                                  onClick={() => handleDeleteProcedure(i)} 
-                                 className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                                 className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-all"
                                >
-                                 <Trash2 size={15} />
+                                 <Trash2 size={16} />
                                </button>
                              </div>
-                           </>
+                           </div>
                          )}
                       </div>
                     ))}
@@ -2639,67 +2759,111 @@ const App: React.FC = () => {
                     <Sparkle size={18} className="text-emerald-500" />
                     <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Adicionais</h3>
                  </div>
-                 <div className="bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                    <div className="flex gap-1.5 items-center">
+                 <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                    <div className="flex flex-col gap-4">
                        <input 
                          value={newSecProcName} 
                          onChange={e => setNewSecProcName(e.target.value)} 
                          placeholder="Novo adicional" 
-                         className="flex-1 bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-w-0" 
+                         className="w-full bg-white dark:bg-slate-900 p-2.5 rounded-xl text-[10px] font-bold border outline-none" 
                        />
-                       <select 
-                         value={newSecProcDuration} 
-                         onChange={e => setNewSecProcDuration(e.target.value)} 
-                         className="bg-white dark:bg-slate-900 p-2 rounded-xl text-[10px] font-bold border outline-none min-[65px] appearance-none"
-                       >
-                          {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                       </select>
-                       <button 
-                         onClick={handleAddSecProcedure} 
-                         className="p-2 bg-emerald-500 text-white rounded-xl active:scale-95 transition-all shrink-0"
-                       >
-                         <Plus size={16} />
-                       </button>
+                       <div className="flex gap-2 items-center">
+                          <div className="flex-1 relative min-w-0">
+                             <Clock size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                             <input 
+                               value={newSecProcDuration} 
+                               onChange={e => setNewSecProcDuration(e.target.value)} 
+                               placeholder="Tempo" 
+                               className="w-full bg-white dark:bg-slate-900 p-2.5 pl-8 rounded-xl text-[10px] font-bold border outline-none" 
+                             />
+                          </div>
+                          <div className="flex-1 relative min-w-0">
+                             <RefreshCw size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                             <input 
+                               type="number"
+                               value={newSecProcDurability} 
+                               onChange={e => setNewSecProcDurability(e.target.value)} 
+                               placeholder="Durabilidade" 
+                               className="w-full bg-white dark:bg-slate-900 p-2.5 pl-8 rounded-xl text-[10px] font-bold border outline-none" 
+                             />
+                          </div>
+                          <button 
+                            onClick={handleAddSecProcedure} 
+                            className="p-2.5 bg-emerald-500 text-white rounded-xl active:scale-95 transition-all shrink-0"
+                          >
+                            <Plus size={20} />
+                          </button>
+                       </div>
                     </div>
                  </div>
                  <div className="space-y-2">
                     {secondaryProcedures.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-100 shadow-sm min-h-[56px]">
+                      <div 
+                        key={i} 
+                        draggable 
+                        onDragStart={() => handleDragStart(i)}
+                        onDragOver={(e) => handleDragOver(e, i, 'secondary')}
+                        onDragEnd={() => handleDragEnd('secondary')}
+                        className={`flex flex-col p-3 bg-white dark:bg-slate-800/40 rounded-xl border shadow-sm space-y-2 overflow-hidden transition-all ${draggedIdx === i ? 'opacity-40 scale-95 border-[var(--primary-color)]' : 'border-slate-100 dark:border-slate-800'}`}
+                      >
                          {editingSecProcIdx === i ? (
-                           <div className="flex-1 flex gap-1 items-center min-w-0">
+                           <div className="space-y-2">
                               <input 
                                 value={editingSecProcName} 
                                 onChange={e => setEditingSecProcName(e.target.value)} 
-                                className="flex-1 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-0" 
+                                className="w-full bg-slate-50 dark:bg-slate-900 p-2 rounded-lg text-[10px] font-bold border outline-none" 
                               />
-                              <select 
-                                value={editingSecProcDuration} 
-                                onChange={e => setEditingSecProcDuration(e.target.value)} 
-                                className="bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg text-[10px] font-bold border outline-none min-w-[55px] appearance-none text-center"
-                              >
-                                 {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                              </select>
-                              <button onClick={handleUpdateSecProcedure} className="p-1.5 bg-emerald-500 text-white rounded-lg shrink-0"><CheckCircle2 size={14} /></button>
-                              <button onClick={() => setEditingSecProcIdx(null)} className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded-lg shrink-0"><X size={14} /></button>
+                              <div className="flex gap-2 items-center">
+                                 <input 
+                                   value={editingSecProcDuration} 
+                                   onChange={e => setEditingSecProcDuration(e.target.value)} 
+                                   placeholder="Tempo"
+                                   className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg text-[10px] font-bold border outline-none" 
+                                 />
+                                 <input 
+                                   type="number"
+                                   value={editingSecProcDurability} 
+                                   onChange={e => setEditingSecProcDurability(e.target.value)} 
+                                   placeholder="Durabilidade"
+                                   className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg text-[10px] font-bold border outline-none" 
+                                 />
+                                 <button onClick={handleUpdateSecProcedure} className="p-2 bg-emerald-500 text-white rounded-lg shrink-0"><CheckCircle2 size={16} /></button>
+                                 <button onClick={() => setEditingSecProcIdx(null)} className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded-lg shrink-0"><X size={16} /></button>
+                              </div>
                            </div>
                          ) : (
-                           <>
-                             <div className="flex flex-col min-w-0"><span className="text-xs font-bold truncate">{p.name}</span><span className="text-[10px] text-slate-400 uppercase font-black">{formatDurationDisplay(p.duration)}</span></div>
+                           <div className="flex items-center gap-3">
+                             <div className="cursor-grab active:cursor-grabbing p-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                               <GripVertical size={20} className="text-slate-300" />
+                             </div>
+                             
+                             <div className="flex-1 min-w-0">
+                               <span className="text-xs font-bold truncate block">{p.name}</span>
+                               <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[9px] text-slate-400 uppercase font-black">{p.duration || 'Tempo'}</span>
+                                  {p.durabilityDays && (
+                                    <div className="flex items-center gap-1.5">
+                                       <span className="text-[9px] text-slate-300 dark:text-slate-700 font-bold">-</span>
+                                       <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{p.durabilityDays} dias</span>
+                                    </div>
+                                  )}
+                               </div>
+                             </div>
                              <div className="flex items-center gap-0.5 shrink-0">
                                <button 
-                                 onClick={() => { setEditingSecProcIdx(i); setEditingSecProcName(p.name); setEditingProcDuration(p.duration); }} 
-                                 className="p-1.5 text-slate-300 hover:text-[var(--primary-color)] transition-colors"
+                                 onClick={() => { setEditingSecProcIdx(i); setEditingSecProcName(p.name); setEditingSecProcDuration(p.duration); setEditingSecProcDurability(p.durabilityDays?.toString() || ''); }} 
+                                 className="p-2 text-slate-400 hover:text-[var(--primary-color)] hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
                                >
-                                 <Edit2 size={15} />
+                                 <Edit2 size={16} />
                                </button>
                                <button 
                                  onClick={() => handleDeleteSecProcedure(i)} 
-                                 className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                                 className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-all"
                                >
-                                 <Trash2 size={15} />
+                                 <Trash2 size={16} />
                                </button>
                              </div>
-                           </>
+                           </div>
                          )}
                       </div>
                     ))}
@@ -2987,7 +3151,7 @@ const App: React.FC = () => {
               {[ {l: 'Faturamento Diário', d: chartDataWeekly, a: DAYS_ABBR}, {l: 'Faturamento Semanal', d: chartDataMonthly, a: ['S1', 'S2', 'S3', 'S4', 'S5']}].map((c, i) => (
                 <div key={i} className="space-y-3">
                   <div className="flex items-center gap-2 ml-1"><BarChart3 size={16} className="text-[var(--primary-color)]" /><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.l}</h4></div>
-                  <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-100 space-y-3">
                     {c.d.map((val, idx) => (
                       <div key={idx} className="flex items-center gap-2"><span className="w-8 text-[8px] font-black text-slate-400 uppercase">{c.a[idx]}</span><div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full gold-gradient rounded-full" style={{ width: `${(val / (Math.max(...c.d, 1))) * 100}%` }} /></div><span className="text-[9px] font-bold min-w-[50px] text-right">R$ {val.toFixed(0)}</span></div>
                     ))}
